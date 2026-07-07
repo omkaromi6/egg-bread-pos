@@ -1,15 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { createClient } from '@supabase/supabase-js'
+import { supabase } from './supabase'
 
 export const dynamic = 'force-dynamic'
-
-// Fallback layout strings to pass Vercel's strict compilation phase
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://omkarenterprise.supabase.co'
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key'
-
-// Global client instantiation that clears all 5 red errors below
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 interface Outlet {
   id: number
@@ -70,7 +63,6 @@ export default function Home() {
   }
 
   const [liveOperatingDate, setLiveOperatingDate] = useState<string>(getTodayDateString())
-  const [selectedReportDate, setSelectedReportDate] = useState<string>(getTodayDateString())
   
   const [auditStartDate, setAuditStartDate] = useState<string>(() => {
     const today = new Date()
@@ -81,7 +73,6 @@ export default function Home() {
   const [auditIngredient, setAuditIngredient] = useState<string>('ALL')
   const [auditOutletFilter, setAuditOutletFilter] = useState<string>('ALL')
 
-  // Replenishment Modal Logic
   const [activeReplenishItem, setActiveReplenishItem] = useState<string | null>(null)
   const [newRepQty, setNewRepQty] = useState(0)
 

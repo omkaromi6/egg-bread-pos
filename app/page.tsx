@@ -534,9 +534,14 @@ export default function Home() {
                         <td key={colHeader} className={`py-2.5 px-2 font-bold ${computedValue > 0 ? (promoterActiveTab === 'consumption' ? 'text-amber-500' : 'text-emerald-400 font-black text-sm') : 'text-slate-700'}`}>{computedValue || '-'}</td>
                       )
                     })}
-                    {(() => { spreadsheetGrandTotal += dailyRowRunningSum })()}
-                    <td className="py-2.5 px-3 bg-blue-950/10 text-blue-400 font-black border-l border-slate-800">{dailyRowRunningSum || '-'}</td>
-                  </tr>
+                    {(() => { 
+  spreadsheetGrandTotal += dailyRowRunningSum;
+  return (
+    <td className="py-2.5 px-3 bg-blue-950/10 text-blue-400 font-semibold text-right border-t border-slate-700">
+      {spreadsheetGrandTotal.toLocaleString()}
+    </td>
+  );
+})()}
                 )
               })}
               <tr className="border-t-2 border-slate-700 bg-slate-900 font-sans text-xs font-black text-center text-white shadow-inner">

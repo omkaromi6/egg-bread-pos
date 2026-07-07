@@ -2,12 +2,15 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
+export const dynamic = 'force-dynamic'
+
+// Fallback layout strings to pass Vercel's strict compilation phase
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder-url.supabase.co'
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key'
 
-export const dynamic = 'force-dynamic'
-
+// Global client instantiation that clears all 5 red errors below
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
 interface Outlet {
   id: number
   name: string
@@ -327,7 +330,7 @@ export default function Home() {
               <input type="date" value={liveOperatingDate} onChange={(e) => setLiveOperatingDate(e.target.value)} className="bg-slate-900 border border-slate-800 rounded px-2 py-0.5 text-xs text-blue-400 font-bold font-mono outline-none cursor-pointer" />
             </div>
           </div>
-          <button onClick={exitToGateway} className="rounded-lg bg-slate-880 px-4 py-2 text-xs font-semibold text-slate-400 hover:bg-red-955 hover:text-white transition">Log Out</button>
+          <button onClick={exitToGateway} className="rounded-lg bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-400 hover:bg-red-900 hover:text-white transition">Log Out</button>
         </header>
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
@@ -336,8 +339,8 @@ export default function Home() {
               <h2 className="mb-4 text-xs font-bold text-blue-400 uppercase tracking-widest">Menu Products</h2>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {menuItems.map(item => (
-                  <div key={item.id} className="flex items-center justify-between rounded-xl bg-slate-950 p-4 border border-slate-855">
-                    <div><h3 className="font-bold text-xs">{item.name}</h3><p className="text-xxs text-slate-500">${item.price.toFixed(2)}</p></div>
+                  <div key={item.id} className="flex items-center justify-between rounded-xl bg-slate-950 p-4 border border-slate-800">
+                    <div><h3 className="font-bold text-xs">{item.name}</h3><p className="text-[10px] text-slate-500">${item.price.toFixed(2)}</p></div>
                     <div className="flex items-center gap-2">
                       <button onClick={() => adjustQuantity(item.id, -1)} className="h-7 w-7 rounded bg-slate-800 text-sm font-bold">-</button>
                       <span className="w-4 text-center font-mono text-xs">{quantities[item.id] || 0}</span>
@@ -346,8 +349,8 @@ export default function Home() {
                   </div>
                 ))}
               </div>
-              <div className="mt-6 flex justify-between items-center bg-slate-950 p-4 rounded-xl border border-slate-855">
-                <div><span className="text-xxs uppercase tracking-wider text-slate-500">Total Bill</span><p className="text-2xl font-black text-white">${orderTotal.toFixed(2)}</p></div>
+              <div className="mt-6 flex justify-between items-center bg-slate-950 p-4 rounded-xl border border-slate-800">
+                <div><span className="text-[10px] uppercase tracking-wider text-slate-500">Total Bill</span><p className="text-2xl font-black text-white">${orderTotal.toFixed(2)}</p></div>
                 <button onClick={handlePunchOrder} className="rounded-lg bg-blue-600 px-6 py-3 text-xs font-bold text-white hover:bg-blue-500">Punch Order Check</button>
               </div>
             </div>
@@ -370,11 +373,11 @@ export default function Home() {
                   {inventory.map(inv => {
                     const { usedToday, currentStockLeft } = getCalculatedItem(inv.item_name, inv.stock_on_first, selectedOutlet.id)
                     return (
-                      <tr key={inv.id} className="border-b border-slate-855/50">
+                      <tr key={inv.id} className="border-b border-slate-800/50">
                         <td className="py-3 font-sans font-bold text-white">{formatIngredientLabel(inv.item_name)}</td>
                         <td className="py-3 text-center text-slate-400">{inv.stock_on_first}</td>
                         <td className="py-3 text-center">
-                          <button onClick={() => openReplenishModal(inv.item_name)} className="rounded bg-slate-950 border border-slate-800 text-xxs px-2 py-1 text-blue-400 hover:border-blue-500">
+                          <button onClick={() => openReplenishModal(inv.item_name)} className="rounded bg-slate-950 border border-slate-800 text-[10px] px-2 py-1 text-blue-400 hover:border-blue-500">
                             + Received
                           </button>
                         </td>
@@ -389,7 +392,7 @@ export default function Home() {
 
             <div className="rounded-2xl bg-slate-900 p-6 border border-slate-800">
               <h2 className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-3">Received Stock History Ledger</h2>
-              <div className="max-h-60 overflow-y-auto rounded-xl border border-slate-855 bg-slate-950 divide-y divide-slate-850">
+              <div className="max-h-60 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 divide-y divide-slate-800">
                 {allReplenishments.length === 0 ? (
                   <p className="p-4 text-center text-xs font-mono text-slate-600 italic">No incoming deliveries logged yet.</p>
                 ) : (
@@ -399,7 +402,7 @@ export default function Home() {
                         <span className="font-bold text-white bg-slate-900 px-2 py-0.5 rounded mr-2 uppercase text-[10px] border border-slate-800">
                           {formatIngredientLabel(log.item_name)}
                         </span>
-                        <span className="text-slate-400 text-xxs font-sans">Date Check Index: {log.day_of_month}th</span>
+                        <span className="text-slate-400 text-[10px] font-sans">Date Check Index: {log.day_of_month}th</span>
                       </div>
                       <span className="text-emerald-400 font-black text-sm">+{log.quantity_added} units</span>
                     </div>
@@ -432,9 +435,9 @@ export default function Home() {
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-5 gap-4">
         <div>
           <h1 className="text-2xl font-black text-amber-400 tracking-tight">👑 Omkar enterprise Command Dashboard</h1>
-          <p className="text-xxs text-slate-400 font-mono mt-0.5 uppercase tracking-widest">Cross-Branch Analytics & Inventory Control Console</p>
+          <p className="text-[10px] text-slate-400 font-mono mt-0.5 uppercase tracking-widest">Cross-Branch Analytics & Inventory Control Console</p>
         </div>
-        <button onClick={exitToGateway} className="rounded-lg bg-slate-850 px-4 py-2 text-xs font-bold text-slate-300 hover:bg-red-955 hover:text-white transition">Exit Portal</button>
+        <button onClick={exitToGateway} className="rounded-lg bg-slate-850 px-4 py-2 text-xs font-bold text-slate-300 hover:bg-red-900 hover:text-white transition">Exit Portal</button>
       </header>
 
       <div className="flex gap-2 border-b border-slate-800 pb-1">
@@ -446,10 +449,10 @@ export default function Home() {
         <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 pb-3 border-b border-slate-800">
           <div>
             <h2 className="text-sm font-bold text-slate-200 uppercase tracking-widest">{promoterActiveTab === 'consumption' ? 'Custom Material Consumption Auditor' : 'Master Dispatch Distribution Balance Sheet'}</h2>
-            <p className="text-xxs text-slate-500 mt-0.5">{promoterActiveTab === 'consumption' ? 'Auditing raw sales volumes subtracted during client orders' : 'Auditing stock drop quantities sent to active locations'}</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">{promoterActiveTab === 'consumption' ? 'Auditing raw sales volumes subtracted during client orders' : 'Auditing stock drop quantities sent to active locations'}</p>
           </div>
           
-          <div className="flex flex-wrap items-center gap-4 bg-slate-950 p-3 rounded-xl border border-slate-855">
+          <div className="flex flex-wrap items-center gap-4 bg-slate-950 p-3 rounded-xl border border-slate-800">
             <div className="flex items-center gap-1.5 text-xs">
               <span className="text-slate-500 uppercase tracking-wider font-bold text-[10px]">Outlet Target:</span>
               <select value={auditOutletFilter} onChange={(e) => setAuditOutletFilter(e.target.value)} className="bg-slate-900 border border-slate-700 text-emerald-400 rounded px-2 py-1 font-bold font-mono outline-none">
@@ -486,7 +489,7 @@ export default function Home() {
                 <th className="py-3 px-3 bg-blue-950/40 text-blue-400 border-l border-slate-800">Period Total</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-855/60 text-center">
+            <tbody className="divide-y divide-slate-800/60 text-center">
               {auditDatesArray.map(dateString => {
                 let dailyRowRunningSum = 0
                 const loopDayInteger = new Date(dateString).getDate()

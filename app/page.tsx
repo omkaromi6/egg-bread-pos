@@ -137,7 +137,6 @@ export default function Home() {
     setLoading(false)
   }
 
-  // --- RE-ENGINEERED: UNPREDICTABLE NON-REPEATABLE SECURITY PROTOCOL ---
   const handleSystemGateUnlock = async () => {
     if (!selectedOutlet) {
       if (passwordInput === 'OmkarAdmin#2026') {
@@ -148,7 +147,6 @@ export default function Home() {
         setErrorMessage('Access Denied: Invalid Master Promoter Credentials.')
       }
     } else {
-      // Swapped out the repetitive keys with completely unique code strings
       const secureOutletKeys: { [key: number]: string } = {
         1: 'Omk_K7x2_Plq1',
         2: 'Omk_M4v9_Ztr2',
@@ -327,7 +325,7 @@ export default function Home() {
               <input type="date" value={liveOperatingDate} onChange={(e) => setLiveOperatingDate(e.target.value)} className="bg-slate-900 border border-slate-800 rounded px-2 py-0.5 text-xs text-blue-400 font-bold font-mono outline-none cursor-pointer" />
             </div>
           </div>
-          <button onClick={exitToGateway} className="rounded-lg bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-400 hover:bg-red-955 hover:text-white transition">Log Out</button>
+          <button onClick={exitToGateway} className="rounded-lg bg-slate-880 px-4 py-2 text-xs font-semibold text-slate-400 hover:bg-red-955 hover:text-white transition">Log Out</button>
         </header>
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
@@ -434,7 +432,7 @@ export default function Home() {
           <h1 className="text-2xl font-black text-amber-400 tracking-tight">👑 Omkar enterprise Command Dashboard</h1>
           <p className="text-xxs text-slate-400 font-mono mt-0.5 uppercase tracking-widest">Cross-Branch Analytics & Inventory Control Console</p>
         </div>
-        <button onClick={exitToGateway} className="rounded-lg bg-slate-850 px-4 py-2 text-xs font-bold text-slate-300 hover:bg-red-950 hover:text-white transition">Exit Portal</button>
+        <button onClick={exitToGateway} className="rounded-lg bg-slate-850 px-4 py-2 text-xs font-bold text-slate-300 hover:bg-red-955 hover:text-white transition">Exit Portal</button>
       </header>
 
       <div className="flex gap-2 border-b border-slate-800 pb-1">
@@ -534,15 +532,10 @@ export default function Home() {
                         <td key={colHeader} className={`py-2.5 px-2 font-bold ${computedValue > 0 ? (promoterActiveTab === 'consumption' ? 'text-amber-500' : 'text-emerald-400 font-black text-sm') : 'text-slate-700'}`}>{computedValue || '-'}</td>
                       )
                     })}
-                    {(() => { 
-  spreadsheetGrandTotal += dailyRowRunningSum;
-  return (
-    <td className="py-2.5 px-3 bg-blue-950/10 text-blue-400 font-semibold text-right border-t border-slate-700">
-      {spreadsheetGrandTotal.toLocaleString()}
-    </td>
-  );
-})()}
-</tr>
+                    <td className="py-2.5 px-3 bg-blue-950/40 text-blue-400 font-bold text-right border-l border-slate-800">
+                      {dailyRowRunningSum.toLocaleString()}
+                    </td>
+                  </tr>
                 )
               })}
               <tr className="border-t-2 border-slate-700 bg-slate-900 font-sans text-xs font-black text-center text-white shadow-inner">

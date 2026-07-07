@@ -542,6 +542,7 @@ export default function Home() {
     </td>
   );
 })()}
+</tr>
                 )
               })}
               <tr className="border-t-2 border-slate-700 bg-slate-900 font-sans text-xs font-black text-center text-white shadow-inner">

@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from './supabase'
 
 export const dynamic = 'force-dynamic'
+export const experimental_ppr = false
 
 interface Outlet {
   id: number

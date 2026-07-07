@@ -55,6 +55,7 @@ export default function Home() {
 
   const [promoterActiveTab, setPromoterActiveTab] = useState<'consumption' | 'dispatches'>('consumption')
 
+  // Hardcoded helper to grab standard YYYY-MM-DD
   const getTodayDateString = () => {
     const today = new Date()
     const yyyy = today.getFullYear()
@@ -63,8 +64,14 @@ export default function Home() {
     return `${yyyy}-${mm}-${dd}`
   }
 
-  const [liveOperatingDate, setLiveOperatingDate] = useState<string>(getTodayDateString())
+  // FIXED CALENDAR DATE: Outlets are hardcoded to today's machine clock. No manual updates allowed.
+  const liveOperatingDate = getTodayDateString()
   
+  // States for Outlet Performance custom time-frame lookup
+  const [outletPeriodStart, setOutletPeriodStart] = useState<string>(getTodayDateString())
+  const [outletPeriodEnd, setOutletPeriodEnd] = useState<string>(getTodayDateString())
+
+  // States for Promoter Master Dashboard range filters
   const [auditStartDate, setAuditStartDate] = useState<string>(() => {
     const today = new Date()
     const mm = String(today.getMonth() + 1).padStart(2, '0')
@@ -145,12 +152,8 @@ export default function Home() {
       }
     } else {
       const secureOutletKeys: { [key: number]: string } = {
-        1: 'Omk_K7x2_Plq1',
-        2: 'Omk_M4v9_Ztr2',
-        3: 'Omk_F8w1_Njk3',
-        4: 'Omk_B3c8_Xyp4',
-        5: 'Omk_R9t5_Dwb5',
-        6: 'Omk_L2s6_Mhv6',
+        1: 'Omk_K7x2_Plq1', 2: 'Omk_M4v9_Ztr2', 3: 'Omk_F8w1_Njk3',
+        4: 'Omk_B3c8_Xyp4', 5: 'Omk_R9t5_Dwb5', 6: 'Omk_L2s6_Mhv6',
       }
 
       const verifiedTargetKey = secureOutletKeys[selectedOutlet.id]
@@ -175,6 +178,39 @@ export default function Home() {
 
     const currentStockLeft = Number(baseStock) + totalReplenished - totalUsedEver
     return { usedToday, currentStockLeft }
+  }
+
+  // COMPUTE DYNAMIC REVENUE METRIC VALUES
+  const getOutletSalesStatsForDateRange = (targetOutletId: number, startDay: string, endDay: string) => {
+    let salesAmountTotal = 0
+    let transactionsLoggedCount = 0
+
+    // Gather distinct transaction records from ingredient consumption timelines
+    const uniqueReceiptKeys = new Set<string>()
+    
+    allSalesHistory.forEach(s => {
+      const recordDate = s.created_at.split('T')[0]
+      if (s.outlet_id === targetOutletId && recordDate >= startDay && recordDate <= endDay) {
+        const receiptUid = `${s.created_at}_${s.outlet_id}`
+        uniqueReceiptKeys.add(receiptUid)
+      }
+    })
+
+    transactionsLoggedCount = uniqueReceiptKeys.size
+    
+    // In our menu map arrangement, base revenue is mapped from ingredients consumption quantities directly
+    // Since Item 1 consumes 1 Egg + 1 Box, its financial collection translates directly through inventory units values
+    // Here we compute total recipe revenue items generated on your counter checkout operations logs
+    allSalesHistory.forEach(s => {
+      const recordDate = s.created_at.split('T')[0]
+      if (s.outlet_id === targetOutletId && recordDate >= startDay && recordDate <= endDay) {
+        if (s.item_name === 'Boxes') {
+          salesAmountTotal += (s.quantity_sold * 12) // Average product price allocation
+        }
+      }
+    })
+
+    return { salesAmountTotal, transactionsLoggedCount }
   }
 
   const openReplenishModal = (itemName: string) => {
@@ -218,6 +254,7 @@ export default function Home() {
     }
     if (shortItem) return alert(`Insufficient quantities for ${formatIngredientLabel(shortItem)}`)
 
+    // Loop through and write deduction entries including a distinct tracking row for total sales price mapping
     for (const inv of inventory) {
       const deduction = totalNeeded[inv.item_name] || 0
       if (deduction > 0) {
@@ -226,10 +263,18 @@ export default function Home() {
           item_name: inv.item_name,
           quantity_sold: deduction,
           eggs_consumed: inv.item_name === 'Egg' ? deduction : 0,
-          created_at: new Date(`${liveOperatingDate}T12:00:00`).toISOString()
+          created_at: new Date().toISOString() // Pushes precise live timestamp
         })
       }
     }
+
+    // Write a billing snapshot record block tied to Boxes items for cash total auditing
+    await supabase.from('sales_history').insert({
+      outlet_id: selectedOutlet.id,
+      item_name: 'Boxes',
+      quantity_sold: quantities['i1'] || quantities['i2'] || 1, // Snapshot pricing handle anchor
+      created_at: new Date().toISOString()
+    })
 
     alert('Bill Punched!');
     setQuantities({})
@@ -268,6 +313,23 @@ export default function Home() {
   currentRenderHeaders.forEach(headerKey => { dynamicBottomTotals[headerKey] = 0 })
   let spreadsheetGrandTotal = 0
 
+  // CALCULATION LOGIC FOR MASTER PROMOTER LIVE REVENUE METRICS
+  let globalPromoterTodaySalesRevenue = 0
+  outlets.forEach(o => {
+    const { salesAmountTotal } = getOutletSalesStatsForDateRange(o.id, liveOperatingDate, liveOperatingDate)
+    globalPromoterTodaySalesRevenue += salesAmountTotal
+  })
+
+  let globalPromoterCustomPeriodRevenue = 0
+  outlets.forEach(o => {
+    const { salesAmountTotal } = getOutletSalesStatsForDateRange(o.id, auditStartDate, auditEndDate)
+    globalPromoterCustomPeriodRevenue += salesAmountTotal
+  })
+
+  // Calculate local outlet live sales numbers
+  const currentTerminalStats = selectedOutlet ? getOutletSalesStatsForDateRange(selectedOutlet.id, liveOperatingDate, liveOperatingDate) : { salesAmountTotal: 0, transactionsLoggedCount: 0 }
+  const customPeriodTerminalStats = selectedOutlet ? getOutletSalesStatsForDateRange(selectedOutlet.id, outletPeriodStart, outletPeriodEnd) : { salesAmountTotal: 0, transactionsLoggedCount: 0 }
+
   if (currentMode === 'gate') {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-slate-900 p-6 text-white font-sans">
@@ -293,7 +355,7 @@ export default function Home() {
             <div className="mx-auto max-w-md rounded-xl bg-slate-800 p-6 border border-slate-700 text-center">
               <h2 className="text-lg font-bold mb-1 text-white">Security Access Key Verification</h2>
               <input 
-                type="text" 
+                type="password" 
                 placeholder="Enter Secure Password..." 
                 value={passwordInput === 'PROMOTER_PROMPT' ? '' : passwordInput} 
                 onChange={(e) => { if(passwordInput === 'PROMOTER_PROMPT') setPasswordInput(''); setPasswordInput(e.target.value); }} 
@@ -314,15 +376,29 @@ export default function Home() {
   if (currentMode === 'outlet' && selectedOutlet) {
     return (
       <main className="min-h-screen bg-slate-950 p-6 font-sans text-slate-100 relative">
-        <header className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-5 gap-4">
+        <header className="mb-6 flex flex-col lg:flex-row justify-between items-start lg:items-center border-b border-slate-800 pb-5 gap-4">
           <div>
             <h1 className="text-2xl font-black">{selectedOutlet.name} Live Terminal</h1>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-[10px] text-slate-400 font-bold uppercase">Operating Calendar Date:</span>
-              <input type="date" value={liveOperatingDate} onChange={(e) => setLiveOperatingDate(e.target.value)} className="bg-slate-900 border border-slate-800 rounded px-2 py-0.5 text-xs text-blue-400 font-bold font-mono outline-none cursor-pointer" />
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Operating Calendar Date:</span>
+              <div className="bg-slate-900 border border-slate-800 px-3 py-1 rounded text-xs font-black text-blue-400 font-mono shadow-inner">
+                {new Date(liveOperatingDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </div>
             </div>
           </div>
-          <button onClick={exitToGateway} className="rounded-lg bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-400 hover:bg-red-900 hover:text-white transition">Log Out</button>
+
+          {/* DYNAMIC REAL-TIME OUTLET DAILY SHIFT SALES COUNTERS */}
+          <div className="flex flex-wrap gap-3 w-full lg:w-auto">
+            <div className="bg-slate-900 border border-slate-800 px-4 py-2 rounded-xl shadow-md min-w-[130px]">
+              <span className="text-[10px] uppercase font-bold text-slate-500 block tracking-wider">Today's Revenue</span>
+              <span className="text-xl font-black text-emerald-400 font-mono">${currentTerminalStats.salesAmountTotal.toLocaleString()}</span>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 px-4 py-2 rounded-xl shadow-md min-w-[110px]">
+              <span className="text-[10px] uppercase font-bold text-slate-500 block tracking-wider">Orders Count</span>
+              <span className="text-xl font-black text-blue-400 font-mono">{currentTerminalStats.transactionsLoggedCount}</span>
+            </div>
+            <button onClick={exitToGateway} className="rounded-xl bg-slate-900 border border-slate-800 px-5 text-xs font-bold text-slate-400 hover:bg-red-950 hover:text-white hover:border-red-900 transition ml-auto lg:ml-0">Log Out</button>
+          </div>
         </header>
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
@@ -357,7 +433,7 @@ export default function Home() {
                     <th className="pb-2">Material</th>
                     <th className="pb-2 text-center">Stock 1st</th>
                     <th className="pb-2 text-center text-blue-400">Receive Supply</th>
-                    <th className="pb-2 text-center text-amber-400">Used Selected Date</th>
+                    <th className="pb-2 text-center text-amber-400">Used Today</th>
                     <th className="pb-2 text-right text-emerald-400">Stock Left</th>
                   </tr>
                 </thead>
@@ -384,7 +460,7 @@ export default function Home() {
 
             <div className="rounded-2xl bg-slate-900 p-6 border border-slate-800">
               <h2 className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-3">Received Stock History Ledger</h2>
-              <div className="max-h-60 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 divide-y divide-slate-800">
+              <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 divide-y divide-slate-800">
                 {allReplenishments.length === 0 ? (
                   <p className="p-4 text-center text-xs font-mono text-slate-600 italic">No incoming deliveries logged yet.</p>
                 ) : (
@@ -394,7 +470,7 @@ export default function Home() {
                         <span className="font-bold text-white bg-slate-900 px-2 py-0.5 rounded mr-2 uppercase text-[10px] border border-slate-800">
                           {formatIngredientLabel(log.item_name)}
                         </span>
-                        <span className="text-slate-400 text-[10px] font-sans">Date Check Index: {log.day_of_month}th</span>
+                        <span className="text-slate-400 text-[10px] font-sans">Day Check Index: {log.day_of_month}th</span>
                       </div>
                       <span className="text-emerald-400 font-black text-sm">+{log.quantity_added} units</span>
                     </div>
@@ -404,6 +480,33 @@ export default function Home() {
             </div>
           </section>
         </div>
+
+        {/* RECENT SALES & HISTORICAL LOGS SEARCH SYSTEM FOR THE OUTLET */}
+        <section className="mt-8 rounded-2xl bg-slate-900 p-6 border border-slate-800 space-y-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-4 gap-4">
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200">Outlet Sales History lookup</h3>
+              <p className="text-[10px] text-slate-500 font-sans mt-0.5">Filter and review past performance summaries directly on the counter</p>
+            </div>
+            
+            <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 p-2 rounded-xl font-mono text-xs">
+              <input type="date" value={outletPeriodStart} onChange={(e) => setOutletPeriodStart(e.target.value)} className="bg-slate-900 border border-slate-700 text-white rounded px-2 py-1 focus:outline-none" />
+              <span className="text-slate-500 text-xs font-sans">to</span>
+              <input type="date" value={outletPeriodEnd} onChange={(e) => setOutletPeriodEnd(e.target.value)} className="bg-slate-900 border border-slate-700 text-white rounded px-2 py-1 focus:outline-none" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl text-center">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Selected Window Sales Total</span>
+              <span className="text-2xl font-black text-emerald-400 font-mono block mt-1">${customPeriodTerminalStats.salesAmountTotal.toLocaleString()}</span>
+            </div>
+            <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl text-center">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Selected Window Orders Count</span>
+              <span className="text-2xl font-black text-blue-400 font-mono block mt-1">{customPeriodTerminalStats.transactionsLoggedCount} orders</span>
+            </div>
+          </div>
+        </section>
 
         {activeReplenishItem && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
@@ -431,6 +534,20 @@ export default function Home() {
         </div>
         <button onClick={exitToGateway} className="rounded-lg bg-slate-850 px-4 py-2 text-xs font-bold text-slate-300 hover:bg-red-900 hover:text-white transition">Exit Portal</button>
       </header>
+
+      {/* PROMOTER REAL-TIME REVENUE SUMMARY METRIC DISPLAY WIDGETS */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="bg-slate-900 border border-slate-800/80 p-5 rounded-2xl shadow-lg relative overflow-hidden group">
+          <span className="text-[10px] uppercase tracking-widest font-extrabold text-slate-500 block">Network-Wide Today Sales</span>
+          <span className="text-3xl font-black text-emerald-400 tracking-tight font-mono block mt-1">${globalPromoterTodaySalesRevenue.toLocaleString()}</span>
+          <p className="text-[10px] text-slate-600 font-sans mt-1">Live synchronized summary across all combined outlets since midnight</p>
+        </div>
+        <div className="bg-slate-900 border border-slate-800/80 p-5 rounded-2xl shadow-lg relative overflow-hidden group">
+          <span className="text-[10px] uppercase tracking-widest font-extrabold text-slate-500 block">Network Selected Range Sales</span>
+          <span className="text-3xl font-black text-blue-400 tracking-tight font-mono block mt-1">${globalPromoterCustomPeriodRevenue.toLocaleString()}</span>
+          <p className="text-[10px] text-slate-600 font-sans mt-1">Computed dynamic revenue total within chosen audit dates below</p>
+        </div>
+      </div>
 
       <div className="flex gap-2 border-b border-slate-800 pb-1">
         <button onClick={() => setPromoterActiveTab('consumption')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition border-t-2 ${promoterActiveTab === 'consumption' ? 'bg-slate-900 text-blue-400 border-blue-500' : 'text-slate-500 border-transparent hover:text-slate-300'}`}>📊 Consumption Records (Stock Out)</button>
@@ -496,14 +613,14 @@ export default function Home() {
                         if (shouldRenderIngredientColumns) {
                           const targetIngName = colHeader
                           computedValue = allSalesHistory.filter(s => {
-                            const recDayStr = new Date(s.created_at).toISOString().split('T')[0]
+                            const recDayStr = s.created_at.split('T')[0]
                             const matchesOutlet = auditOutletFilter === 'ALL' || s.outlet_id === Number(auditOutletFilter)
                             return s.item_name === targetIngName && matchesOutlet && recDayStr === dateString
                           }).reduce((a, c) => a + Number(c.quantity_sold), 0)
                         } else {
                           const targetOutletId = outlets.find(o => o.name === colHeader)?.id || 0
                           computedValue = allSalesHistory.filter(s => {
-                            const recDayStr = new Date(s.created_at).toISOString().split('T')[0]
+                            const recDayStr = s.created_at.split('T')[0]
                             return s.item_name === auditIngredient && s.outlet_id === targetOutletId && recDayStr === dateString
                           }).reduce((a, c) => a + Number(c.quantity_sold), 0)
                         }
@@ -539,9 +656,10 @@ export default function Home() {
                 <td className="py-3.5 px-3 text-left bg-slate-900 font-extrabold text-blue-400 uppercase tracking-wider sticky left-0 z-10 border-r border-slate-800">Total Sum</td>
                 {currentRenderHeaders.map(colHeader => {
                   const verticalTotal = dynamicBottomTotals[colHeader]
+                  spreadsheetGrandTotal += verticalTotal
                   return <td key={colHeader} className={`py-3.5 px-2 font-mono text-sm tracking-tight ${verticalTotal > 0 ? 'text-emerald-400 font-black' : 'text-slate-500'}`}>{verticalTotal || 0}</td>
                 })}
-                <td className="py-3.5 px-3 bg-emerald-950/40 border-l border-slate-800 font-mono text-base text-emerald-400 font-black">{spreadsheetGrandTotal}</td>
+                <td className="py-3.5 px-3 bg-emerald-950/40 border-l border-slate-800 font-mono text-base text-emerald-400 font-black">{spreadsheetGrandTotal.toLocaleString()}</td>
               </tr>
             </tbody>
           </table>

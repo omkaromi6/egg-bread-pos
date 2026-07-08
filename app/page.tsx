@@ -71,54 +71,7 @@ export default function Home() {
   const [outletTab, setOutletTab] = useState<'counter' | 'ledger' | 'received_stock'>('counter')
   const [promoterActiveTab, setPromoterActiveTab] = useState<'consumption' | 'dispatches'>('consumption')
 
-  // EXPLICIT SEPARATE CALENDAR DATETIME PICKERS
-  const [overviewStartDate, setOverviewStartDate] = useState<string>(() => {
-    const today = new Date()
-    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
-  })
-  const [overviewEndDate, setOverviewEndDate] = useState<string>(() => {
-    const today = new Date()
-    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-  })
-
-  const [branchCardDateRanges, setBranchCardDateRanges] = useState<{ [key: number]: { start: string; end: string } }>(() => {
-    const today = new Date()
-    const yyyy = today.getFullYear()
-    const mm = String(today.getMonth() + 1).padStart(2, '0')
-    const dd = String(today.getDate()).padStart(2, '0')
-    const initialRange = { start: `${yyyy}-${mm}-01`, end: `${yyyy}-${mm}-${dd}` }
-    return { 1: initialRange, 2: initialRange, 3: initialRange, 4: initialRange, 5: initialRange, 6: initialRange }
-  })
-
-  // DEDICATED SEPARATE RANGES STATE MAPPED FOR REVENUE MATRIX VIEW
-  const [revMatrixDateRanges, setRevMatrixDateRanges] = useState<{ [key: number]: { start: string; end: string } }>(() => {
-    const today = new Date()
-    const yyyy = today.getFullYear()
-    const mm = String(today.getMonth() + 1).padStart(2, '0')
-    const dd = String(today.getDate()).padStart(2, '0')
-    const initialRange = { start: `${yyyy}-${mm}-01`, end: `${yyyy}-${mm}-${dd}` }
-    return { 1: initialRange, 2: initialRange, 3: initialRange, 4: initialRange, 5: initialRange, 6: initialRange }
-  })
-
-  // INDEPENDENT CALENDAR PICKER FOR OUTLET RECEIVED STOCK TAB
-  const [outletReceivedStart, setOutletReceivedStart] = useState<string>(() => {
-    const today = new Date()
-    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
-  })
-  const [outletReceivedEnd, setOutletReceivedEnd] = useState<string>(() => {
-    const today = new Date()
-    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-  })
-
-  // EXPLICIT MANUAL DISTRIBUTION DISPATCH FORM CONTROL FIELDS
-  const [dispatchOutletId, setDispatchOutletId] = useState<number>(1)
-  const [dispatchItemName, setDispatchItemName] = useState<string>('Egg')
-  const [dispatchQty, setDispatchQty] = useState<number>(0)
-  const [dispatchDate, setDispatchDate] = useState<string>(() => {
-    const today = new Date()
-    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-  })
-
+  // TIMEZONE SAFE DATE STRING GENERATOR
   const getTodayDateString = () => {
     const today = new Date()
     const yyyy = today.getFullYear()
@@ -132,9 +85,34 @@ export default function Home() {
   const [outletPeriodStart, setOutletPeriodStart] = useState<string>(getTodayDateString())
   const [outletPeriodEnd, setOutletPeriodEnd] = useState<string>(getTodayDateString())
 
-  const [auditStartDate, setAuditStartDate] = useState<string>(() => {
+  const [overviewStartDate, setOverviewStartDate] = useState<string>(() => {
     const today = new Date()
     return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+  })
+  const [overviewEndDate, setOverviewEndDate] = useState<string>(getTodayDateString())
+
+  const [branchCardDateRanges, setBranchCardDateRanges] = useState<{ [key: number]: { start: string; end: string } }>(() => {
+    const initialRange = { start: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`, end: getTodayDateString() }
+    return { 1: initialRange, 2: initialRange, 3: initialRange, 4: initialRange, 5: initialRange, 6: initialRange }
+  })
+
+  const [revMatrixDateRanges, setRevMatrixDateRanges] = useState<{ [key: number]: { start: string; end: string } }>(() => {
+    const initialRange = { start: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`, end: getTodayDateString() }
+    return { 1: initialRange, 2: initialRange, 3: initialRange, 4: initialRange, 5: initialRange, 6: initialRange }
+  })
+
+  const [outletReceivedStart, setOutletReceivedStart] = useState<string>(() => {
+    return `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`
+  })
+  const [outletReceivedEnd, setOutletReceivedEnd] = useState<string>(getTodayDateString())
+
+  const [dispatchOutletId, setDispatchOutletId] = useState<number>(1)
+  const [dispatchItemName, setDispatchItemName] = useState<string>('Egg')
+  const [dispatchQty, setDispatchQty] = useState<number>(0)
+  const [dispatchDate, setDispatchDate] = useState<string>(getTodayDateString())
+
+  const [auditStartDate, setAuditStartDate] = useState<string>(() => {
+    return `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`
   })
   const [auditEndDate, setAuditEndDate] = useState<string>(getTodayDateString())
   const [auditIngredient, setAuditIngredient] = useState<string>('ALL')
@@ -181,7 +159,10 @@ export default function Home() {
     if (s.date_string && s.date_string.trim().length === 10) {
       return s.date_string
     }
-    return s.created_at ? s.created_at.split('T')[0] : liveOperatingDate
+    if (!s.created_at) return liveOperatingDate
+    const d = new Date(s.created_at)
+    const offset = d.getTimezoneOffset() * 60000
+    return new Date(d.getTime() - offset).toISOString().split('T')[0]
   }
 
   useEffect(() => {
@@ -324,13 +305,14 @@ export default function Home() {
     }).reduce((a, c) => a + Number(c.quantity_added), 0)
 
     const totalUsedEver = allSalesHistory.filter(s => {
+      if (s.outlet_id !== targetOutletId) return false
       if (distinctIngredients.includes(s.item_name)) {
-        return s.item_name === itemName && s.outlet_id === targetOutletId
+        return s.item_name === itemName
       }
       const menuRef = menuItems.find(m => m.name === s.item_name)
-      return s.outlet_id === targetOutletId && (menuRef?.recipe.find(r => r.ingredient === itemName)?.qty || 0) > 0
+      return (menuRef?.recipe.find(r => r.ingredient === itemName)?.qty || 0) > 0
     }).reduce((a, c) => {
-      if (distinctIngredients.includes(c.item_name)) return a + Number(c.quantity_sold)
+      if (distinctIngredients.includes(c.item_name)) return c.item_name === itemName ? a + Number(c.quantity_sold) : a
       const menuRef = menuItems.find(m => m.name === c.item_name)
       const ingUsage = menuRef?.recipe.find(r => r.ingredient === itemName)?.qty || 0
       return a + (Number(c.quantity_sold) * ingUsage)
@@ -574,7 +556,6 @@ export default function Home() {
               </div>
             </div>
             
-            {/* FIXED DISPLAY CLASS: Removed 'hidden sm:block' so it remains visible on all mobile dashboard layouts */}
             <div className="bg-gradient-to-r from-purple-950/40 to-blue-950/30 border border-purple-900/60 px-4 py-2 rounded-xl block">
               <span className="text-[9px] uppercase font-black text-purple-400 block tracking-widest">Outlet Top Performer</span>
               <span className="text-xs font-extrabold text-white font-sans">{getTopPerformerLabel(selectedOutlet.id, liveOperatingDate, liveOperatingDate)}</span>
@@ -664,7 +645,7 @@ export default function Home() {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-4 gap-4">
               <div>
                 <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200">Outlet Sales History lookup</h3>
-                <p className="text-[10px] text-slate-500">Filter and review past performance summaries summaries</p>
+                <p className="text-[10px] text-slate-500">Filter and review past performance summaries</p>
               </div>
               
               <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 p-2 rounded-xl font-mono text-xs">
@@ -943,15 +924,15 @@ export default function Home() {
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 text-center font-mono text-xs pt-1">
-                    <div className="bg-slate-950/40 p-2 rounded border border-slate-800/60">
+                    <div className="bg-slate-900/40 p-2 rounded border border-slate-800/60">
                       <span className="text-[9px] font-sans text-slate-500 block">Revenue</span>
                       <span className="font-bold text-emerald-400">${localStats.salesAmountTotal}</span>
                     </div>
-                    <div className="bg-slate-950/40 p-2 rounded border border-slate-800/60">
+                    <div className="bg-slate-900/40 p-2 rounded border border-slate-800/60">
                       <span className="text-[9px] font-sans text-slate-500 block">Orders</span>
                       <span className="font-bold text-blue-400">{localStats.transactionsLoggedCount}</span>
                     </div>
-                    <div className="bg-slate-950/40 p-2 rounded border border-slate-800/60">
+                    <div className="bg-slate-900/40 p-2 rounded border border-slate-800/60">
                       <span className="text-[9px] font-sans text-slate-500 block">Items</span>
                       <span className="font-bold text-amber-500">{localStats.totalItemsDispatchedCount}</span>
                     </div>

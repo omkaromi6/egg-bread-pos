@@ -177,7 +177,6 @@ export default function Home() {
     return token
   }
 
-  // FALLBACK DATE STRIPPER TOOL: Ensures seamless reading of old/new date styles safely
   const resolveTargetRowDate = (s: SalesLog) => {
     if (s.date_string && s.date_string.trim().length === 10) {
       return s.date_string
@@ -433,7 +432,6 @@ export default function Home() {
     for (const item of menuItems) {
       const selectedVolumeCount = quantities[item.id] || 0
       if (selectedVolumeCount > 0) {
-        // Try passing both fields safely to never fail table insertion parameters
         await supabase.from('sales_history').insert({
           outlet_id: selectedOutlet.id,
           item_name: item.name,
@@ -576,7 +574,8 @@ export default function Home() {
               </div>
             </div>
             
-            <div className="bg-gradient-to-r from-purple-950/40 to-blue-950/30 border border-purple-900/60 px-4 py-2 rounded-xl hidden sm:block">
+            {/* FIXED DISPLAY CLASS: Removed 'hidden sm:block' so it remains visible on all mobile dashboard layouts */}
+            <div className="bg-gradient-to-r from-purple-950/40 to-blue-950/30 border border-purple-900/60 px-4 py-2 rounded-xl block">
               <span className="text-[9px] uppercase font-black text-purple-400 block tracking-widest">Outlet Top Performer</span>
               <span className="text-xs font-extrabold text-white font-sans">{getTopPerformerLabel(selectedOutlet.id, liveOperatingDate, liveOperatingDate)}</span>
             </div>
@@ -665,7 +664,7 @@ export default function Home() {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-4 gap-4">
               <div>
                 <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200">Outlet Sales History lookup</h3>
-                <p className="text-[10px] text-slate-500">Filter and review past performance summaries directly on the counter</p>
+                <p className="text-[10px] text-slate-500">Filter and review past performance summaries summaries</p>
               </div>
               
               <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 p-2 rounded-xl font-mono text-xs">
@@ -1049,7 +1048,7 @@ export default function Home() {
                     <span className="text-[9px] text-emerald-400 uppercase font-bold tracking-wider block mb-1">Itemized Sales Dissection:</span>
                     {getProductSalesPerformanceBreakdown(o.id, localRange.start, localRange.end).map(prod => (
                       <div key={prod.id} className="flex justify-between items-center font-mono border-b border-slate-900 pb-0.5 last:border-0 text-slate-400">
-                        <span className="font-sans text-white truncate max-w-[120px]">{prod.name}</span>
+                        <span className="font-sans text-white truncate max-w-[130px]">{prod.name}</span>
                         <span className="text-emerald-500 font-bold">${prod.itemRevenue.toLocaleString()} <span className="text-slate-600 font-normal text-[10px]">({prod.unitsSold} qty)</span></span>
                       </div>
                     ))}

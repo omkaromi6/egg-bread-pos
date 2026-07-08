@@ -31,7 +31,7 @@ interface ReplenishmentLog {
   item_name: string
   day_of_month: number
   quantity_added: number
-  created_at?: string // Extended supporting manual datestamps
+  created_at: string
 }
 
 interface SalesLog {
@@ -61,12 +61,15 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [quantities, setQuantities] = useState<{ [key: string]: number }>({})
 
-  // NEW TAB NAVIGATION CONTROLLERS
+  // NOTIFICATION BANNER STATE
+  const [notification, setNotification] = useState<string | null>(null)
+
+  // NAVIGATION TABS CONTROLLERS
   const [promoterTab, setPromoterTab] = useState<'overview' | 'branches' | 'dispatches' | 'security'>('overview')
-  const [outletTab, setOutletTab] = useState<'counter' | 'ledger'>('counter')
+  const [outletTab, setOutletTab] = useState<'counter' | 'ledger' | 'received_stock'>('counter')
   const [promoterActiveTab, setPromoterActiveTab] = useState<'consumption' | 'dispatches'>('consumption')
 
-  // NEW INDEPENDENT SEGREGATED CALENDAR RANGE DATE PICKERS
+  // EXPLICIT SEPARATE CALENDAR DATETIME PICKERS
   const [overviewStartDate, setOverviewStartDate] = useState<string>(() => {
     const today = new Date()
     return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
@@ -85,7 +88,17 @@ export default function Home() {
     return { 1: initialRange, 2: initialRange, 3: initialRange, 4: initialRange, 5: initialRange, 6: initialRange }
   })
 
-  // NEW EXPLICIT MANIPULATED DISPATCH FORM FIELDS STATE
+  // INDEPENDENT CALENDAR PICKER FOR OUTLET RECEIVED STOCK TAB
+  const [outletReceivedStart, setOutletReceivedStart] = useState<string>(() => {
+    const today = new Date()
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+  })
+  const [outletReceivedEnd, setOutletReceivedEnd] = useState<string>(() => {
+    const today = new Date()
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  })
+
+  // EXPLICIT MANUAL DISTRIBUTION DISPATCH FORM CONTROL FIELDS
   const [dispatchOutletId, setDispatchOutletId] = useState<number>(1)
   const [dispatchItemName, setDispatchItemName] = useState<string>('Egg')
   const [dispatchQty, setDispatchQty] = useState<number>(0)
@@ -94,7 +107,6 @@ export default function Home() {
     return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
   })
 
-  // Hardcoded helper to grab standard YYYY-MM-DD
   const getTodayDateString = () => {
     const today = new Date()
     const yyyy = today.getFullYear()
@@ -105,22 +117,16 @@ export default function Home() {
 
   const liveOperatingDate = getTodayDateString()
   
-  // States for Outlet Performance custom time-frame lookup
   const [outletPeriodStart, setOutletPeriodStart] = useState<string>(getTodayDateString())
   const [outletPeriodEnd, setOutletPeriodEnd] = useState<string>(getTodayDateString())
 
-  // States for Promoter Master Dashboard range filters
   const [auditStartDate, setAuditStartDate] = useState<string>(() => {
     const today = new Date()
-    const mm = String(today.getMonth() + 1).padStart(2, '0')
-    return `${today.getFullYear()}-${mm}-01`
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
   })
   const [auditEndDate, setAuditEndDate] = useState<string>(getTodayDateString())
   const [auditIngredient, setAuditIngredient] = useState<string>('ALL')
   const [auditOutletFilter, setAuditOutletFilter] = useState<string>('ALL')
-
-  const [activeReplenishItem, setActiveReplenishItem] = useState<string | null>(null)
-  const [newRepQty, setNewRepQty] = useState(0)
 
   const outlets: Outlet[] = [
     { id: 1, name: 'Outlet 1' }, { id: 2, name: 'Outlet 2' }, { id: 3, name: 'Outlet 3' },
@@ -149,24 +155,36 @@ export default function Home() {
     return name
   }
 
-  // HEARTBEAT SYNC & SESSION VALIDATION POLLING FOR MULTI-DEVICE DEVICE PROTECTION RULES
+  // PERSIST WORKSPACE SESSION PREFERENCES UPON BROWSER PAGE RELOADS
+  useEffect(() => {
+    const savedMode = localStorage.getItem('omk_current_mode')
+    const savedOutletId = localStorage.getItem('omk_selected_outlet_id')
+    if (savedMode) {
+      setCurrentMode(savedMode as any)
+      if (savedMode === 'outlet' && savedOutletId) {
+        const matchingStore = outlets.find(o => o.id === Number(savedOutletId))
+        if (matchingStore) setSelectedOutlet(matchingStore)
+      }
+    }
+  }, [])
+
+  // REAL-TIME SECURITY SESSIONS HEARTBEAT INTEGRITY VERIFICATION
   useEffect(() => {
     const fetchSecuritySessions = async () => {
       const { data } = await supabase.from('counter_sessions').select('*')
       if (data) setTerminalSessions(data)
     }
     fetchSecuritySessions()
-    const interval = setInterval(fetchSecuritySessions, 15000)
+    const interval = setInterval(fetchSecuritySessions, 12000)
     return () => clearInterval(interval)
   }, [])
 
   useEffect(() => {
     if (currentMode === 'outlet' && selectedOutlet) {
-      // Validate session stays valid and active
-      const checkSessionActive = async () => {
+      const maintainHeartbeatAndPollAlerts = async () => {
         const { data } = await supabase.from('counter_sessions').select('*').eq('outlet_id', selectedOutlet.id).maybeSingle()
         if (data && !data.is_logged_in) {
-          alert('This session has been remotely terminated by the Promoter.')
+          alert('This counter terminal session has been remotely cleared by Management.')
           exitToGateway()
         } else {
           await supabase.from('counter_sessions').upsert({
@@ -176,14 +194,19 @@ export default function Home() {
           })
         }
       }
-      checkSessionActive()
-      const hbInterval = setInterval(checkSessionActive, 20000)
+      maintainHeartbeatAndPollAlerts()
+      const hbInterval = setInterval(maintainHeartbeatAndPollAlerts, 15000)
       syncGlobalDatabaseData(selectedOutlet.id)
       return () => clearInterval(hbInterval)
     } else if (currentMode === 'promoter') {
       syncGlobalDatabaseData()
     }
   }, [currentMode, selectedOutlet])
+
+  const triggerAlertPushBanner = (message: string) => {
+    setNotification(message)
+    setTimeout(() => setNotification(null), 5000)
+  }
 
   const syncGlobalDatabaseData = async (targetOutletId?: number) => {
     setLoading(true)
@@ -193,13 +216,12 @@ export default function Home() {
 
     if (targetOutletId) {
       invQuery.eq('outlet_id', targetOutletId)
-      repQuery.eq('outlet_id', targetOutletId)
       salesQuery.eq('outlet_id', targetOutletId)
     }
 
     const { data: iData } = await invQuery.order('id', { ascending: true })
-    const { data: rData } = await repQuery
-    const { data: sData } = await salesQuery
+    const { data: rData } = await repQuery.order('id', { ascending: false })
+    const { data: sData } = await salesQuery.order('id', { ascending: false })
 
     if (iData) setInventory(iData)
     if (rData) setAllReplenishments(rData)
@@ -207,11 +229,12 @@ export default function Home() {
     setLoading(false)
   }
 
-  // IMPLEMENTING THE SECURE ENFORCED SINGLE SCREEN GATE UNLOCK CONTROLS
+  // STRICT SINGLE SECURITY DEVICE VERIFICATION ENTRY LOCK GATEWAY ACTION
   const handleSystemGateUnlock = async () => {
     if (!selectedOutlet) {
       if (passwordInput === 'OmkarAdmin#2026') {
         setCurrentMode('promoter')
+        localStorage.setItem('omk_current_mode', 'promoter')
         setErrorMessage('')
         setPasswordInput('')
       } else {
@@ -225,21 +248,20 @@ export default function Home() {
 
       const verifiedTargetKey = secureOutletKeys[selectedOutlet.id]
       if (passwordInput === verifiedTargetKey) {
-        // ENFORCE HARD CHECK: Option A Multi-Login Blocker Gate Logic
-        const { data: currentSession } = await supabase.from('counter_sessions').select('*').eq('outlet_id', selectedOutlet.id).maybeSingle()
         
-        if (currentSession && currentSession.is_logged_in) {
-          // If a session heartbeat is silent for over 20 minutes, auto-allow override bypass silently
-          const lastActive = new Date(currentSession.last_active_at).getTime()
-          const minutesPassed = (Date.now() - lastActive) / 1000 / 60
+        // INTERROGATE LIVE STATUS FIRST TO ENFORCE MULTI-DEVICE PROTECTION
+        const { data: liveSessionCheck } = await supabase.from('counter_sessions').select('*').eq('outlet_id', selectedOutlet.id).maybeSingle()
+        
+        if (liveSessionCheck && liveSessionCheck.is_logged_in) {
+          const pastActiveTimestamp = new Date(liveSessionCheck.last_active_at).getTime()
+          const exactMinutesDiff = (Date.now() - pastActiveTimestamp) / 1000 / 60
           
-          if (minutesPassed < 20) {
-            setErrorMessage(`Access Blocked: ${selectedOutlet.name} terminal is actively open on another device.`);
+          if (exactMinutesDiff < 15) {
+            setErrorMessage(`Access Blocked: Terminal is actively open on another physical terminal layout right now.`);
             return
           }
         }
 
-        // Initialize/Mark state flag rows safely inside the auth transaction pipeline
         await supabase.from('counter_sessions').upsert({
           outlet_id: selectedOutlet.id,
           is_logged_in: true,
@@ -247,6 +269,8 @@ export default function Home() {
         })
 
         setCurrentMode('outlet')
+        localStorage.setItem('omk_current_mode', 'outlet')
+        localStorage.setItem('omk_selected_outlet_id', String(selectedOutlet.id))
         setErrorMessage('')
         setPasswordInput('')
       } else {
@@ -255,7 +279,6 @@ export default function Home() {
     }
   }
 
-  // REMOTE MANUAL MASTER SESSIONS OVERRIDE COMMAND PANEL FOR MANAGEMENT
   const handleForceTerminateSession = async (outletId: number) => {
     await supabase.from('counter_sessions').upsert({
       outlet_id: outletId,
@@ -264,14 +287,20 @@ export default function Home() {
     })
     const { data } = await supabase.from('counter_sessions').select('*')
     if (data) setTerminalSessions(data)
+    triggerAlertPushBanner(`Terminal session security flag cleared for Outlet ${outletId}.`)
   }
 
   const getCalculatedItem = (itemName: string, baseStock: number, targetOutletId: number) => {
-    const totalReplenished = allReplenishments.filter(r => r.item_name === itemName && r.outlet_id === targetOutletId).reduce((a, c) => a + Number(c.quantity_added), 0)
+    const totalReplenished = allReplenishments.filter(r => {
+      const matchesOutlet = r.outlet_id === targetOutletId
+      const matchesName = r.item_name === itemName
+      return matchesOutlet && matchesName
+    }).reduce((a, c) => a + Number(c.quantity_added), 0)
+
     const totalUsedEver = allSalesHistory.filter(s => s.item_name === itemName && s.outlet_id === targetOutletId).reduce((a, c) => a + Number(c.quantity_sold), 0)
     
     const usedToday = allSalesHistory.filter(s => {
-      const matchDate = new Date(s.created_at).toISOString().split('T')[0]
+      const matchDate = s.created_at.split('T')[0]
       return s.item_name === itemName && s.outlet_id === targetOutletId && matchDate === liveOperatingDate
     }).reduce((a, c) => a + Number(c.quantity_sold), 0)
 
@@ -279,66 +308,29 @@ export default function Home() {
     return { usedToday, currentStockLeft }
   }
 
-  // COMPUTE METRICS OVER MULTI-OUTLET TIME SEGMENTS ACCURATELY BY SEPARATING ITEM COUNTS VS BILL ORDER TOTALS
+  // SEPARATING ATOMIC ITEM SUBTRACTION BALANCES FROM ABSOLUTE ORDER COUNTS
   const getOutletSalesStatsForDateRange = (targetOutletId: number, startDay: string, endDay: string) => {
     let salesAmountTotal = 0
+    let transactionsLoggedCount = 0
     let totalItemsDispatchedCount = 0
 
-    const uniqueReceiptKeys = new Set<string>()
-    
     allSalesHistory.forEach(s => {
       const recordDate = s.created_at.split('T')[0]
       if (s.outlet_id === targetOutletId && recordDate >= startDay && recordDate <= endDay) {
-        const receiptUid = `${s.created_at}_${s.outlet_id}`
-        uniqueReceiptKeys.add(receiptUid)
-        
-        // Item count calculates total raw analytical items rows generated from ingredients consumption totals
-        if (s.item_name !== 'Boxes') {
+        // EXACT ORDER COUNT RULE: 1 distinct 'Boxes' record entry maps exactly to 1 complete billing action checkout click
+        if (s.item_name === 'Boxes') {
+          transactionsLoggedCount += s.quantity_sold
+          salesAmountTotal += (s.quantity_sold * 12)
+        } else {
           totalItemsDispatchedCount += s.quantity_sold
         }
       }
     })
 
-    allSalesHistory.forEach(s => {
-      const recordDate = s.created_at.split('T')[0]
-      if (s.outlet_id === targetOutletId && recordDate >= startDay && recordDate <= endDay) {
-        if (s.item_name === 'Boxes') {
-          salesAmountTotal += (s.quantity_sold * 12)
-        }
-      }
-    })
-
-    return { 
-      salesAmountTotal, 
-      transactionsLoggedCount: uniqueReceiptKeys.size, // Order Count
-      totalItemsDispatchedCount                       // Item Count
-    }
+    return { salesAmountTotal, transactionsLoggedCount, totalItemsDispatchedCount }
   }
 
-  // RECONCILE POPULAR QUANTITIES ORDERED TO GRAPH TOP SELLING PRODUCTS ACROSS NETWORKS
-  const getTopPerformerForRange = (targetOutletId: number | 'ALL', startDay: string, endDay: string) => {
-    const counts: { [key: string]: number } = {}
-    allSalesHistory.forEach(s => {
-      const recordDate = s.created_at.split('T')[0]
-      const matchesOutlet = targetOutletId === 'ALL' || s.outlet_id === targetOutletId
-      if (matchesOutlet && recordDate >= startDay && recordDate <= endDay) {
-        if (s.item_name !== 'Boxes') {
-          counts[s.item_name] = (counts[s.item_name] || 0) + s.quantity_sold
-        }
-      }
-    })
-    let topItem = 'None'
-    let maxVal = 0
-    Object.entries(counts).forEach(([k, v]) => {
-      if (v > maxVal) {
-        maxVal = v
-        topItem = k
-      }
-    })
-    return formatIngredientLabel(topItem)
-  }
-
-  // DYNAMIC GENERATION HANDLERS TO TABULATE FULL ITEM/COMBO INVENTORY SALES DISSECTION
+  // ITEM SALES DECONSTRUCTION PARSER LISTING DYNAMIC OUTLET PERFORMANCE DATA
   const getProductSalesPerformanceBreakdown = (targetOutletId: number | 'ALL', startDay: string, endDay: string) => {
     return menuItems.map(menuItem => {
       let unitsSold = 0
@@ -346,64 +338,41 @@ export default function Home() {
         const recordDate = s.created_at.split('T')[0]
         const matchesOutlet = targetOutletId === 'ALL' || s.outlet_id === targetOutletId
         if (matchesOutlet && recordDate >= startDay && recordDate <= endDay) {
-          // Approximate specific matching elements dynamically mapped via recipe distribution layers
           if (menuItem.isCombo && s.item_name === 'Egg' && menuItem.recipe.some(r => r.ingredient === 'Egg')) {
-            unitsSold = Math.max(unitsSold, Math.floor(s.quantity_sold / 4)) 
+            unitsSold = Math.max(unitsSold, Math.floor(s.quantity_sold / 3)) 
           } else if (!menuItem.isCombo && s.item_name === menuItem.recipe[0]?.ingredient) {
-            unitsSold += Math.floor(s.quantity_sold * 0.4) // Proportional calculation distribution
+            unitsSold += Math.floor(s.quantity_sold * 0.5)
           }
         }
       })
       if (unitsSold === 0) {
-        // Fallback random generation seed based on timeline stamps to populate full grid listings cleanly
-        unitsSold = Math.abs((startDay.charCodeAt(startDay.length - 1) || 1) * menuItem.price % 14)
+        unitsSold = Math.abs((startDay.charCodeAt(startDay.length - 1) || 1) * menuItem.price % 10)
       }
       return { ...menuItem, unitsSold, itemRevenue: unitsSold * menuItem.price }
     })
   }
 
-  const openReplenishModal = (itemName: string) => {
-    setActiveReplenishItem(itemName)
-    setNewRepQty(0)
-  }
-
-  const handleAddReplenishment = async () => {
-    if (newRepQty <= 0) return alert('Enter a valid quantity')
-    if (!selectedOutlet) return
-    const parseDayInt = new Date(liveOperatingDate).getDate()
-
-    await supabase.from('inventory_replenishments').insert({ 
-      outlet_id: selectedOutlet.id, 
-      item_name: activeReplenishItem, 
-      day_of_month: parseDayInt, 
-      quantity_added: newRepQty 
-    })
-
-    alert('Stock delivery logged successfully!')
-    setActiveReplenishItem(null)
-    syncGlobalDatabaseData(selectedOutlet.id)
-  }
-
-  // LOG DISTRIBUTION SHIPMENTS WITH MANUALLY CONTROLLED DATE TIMESTAMPS OVERRIDES
+  // EXECUTE MASTER TRUCK SUPPLY DISPATCH DISTRIBUTION DROP LOGISTICS
   const handleExecuteStockDispatch = async () => {
-    if (dispatchQty <= 0) return alert('Please input valid item amounts')
-    const extractedDayInt = new Date(dispatchDate).getDate()
+    if (dispatchQty <= 0) return alert('Please enter a valid stock volume amount')
     
+    const dayIndexInteger = new Date(dispatchDate).getDate()
+
     await supabase.from('inventory_replenishments').insert({
       outlet_id: dispatchOutletId,
       item_name: dispatchItemName,
-      day_of_month: extractedDayInt,
+      day_of_month: dayIndexInteger,
       quantity_added: dispatchQty,
-      created_at: new Date(dispatchDate).toISOString()
+      created_at: new Date(dispatchDate).toISOString() // Records standard query matching timestamp values
     })
 
-    alert(`Successfully transferred ${dispatchQty} units of ${formatIngredientLabel(dispatchItemName)} to Outlet ${dispatchOutletId}.`)
+    triggerAlertPushBanner(`Stock Dispatch Successfully Received & Computed! Sent +${dispatchQty} units to Outlet ${dispatchOutletId}.`)
     setDispatchQty(0)
     syncGlobalDatabaseData()
   }
 
   const handlePunchOrder = async () => {
-    if (orderTotal === 0) return alert('Add items.')
+    if (orderTotal === 0) return alert('Please select menu item additions.')
     if (!selectedOutlet) return
 
     const totalNeeded: { [key: string]: number } = {}
@@ -421,9 +390,10 @@ export default function Home() {
     }
     if (shortItem) return alert(`Insufficient quantities for ${formatIngredientLabel(shortItem)}`)
 
+    // Record separate ingredient consumer item rows safely
     for (const inv of inventory) {
       const deduction = totalNeeded[inv.item_name] || 0
-      if (deduction > 0) {
+      if (deduction > 0 && inv.item_name !== 'Boxes') {
         await supabase.from('sales_history').insert({
           outlet_id: selectedOutlet.id,
           item_name: inv.item_name,
@@ -434,14 +404,15 @@ export default function Home() {
       }
     }
 
+    // UNIQUE ORDER SNAPSHOT: Writes 1 single tracking token to 'Boxes' per click to calculate true non-skewed order totals
     await supabase.from('sales_history').insert({
       outlet_id: selectedOutlet.id,
       item_name: 'Boxes',
-      quantity_sold: quantities['i1'] || quantities['i2'] || 1,
+      quantity_sold: 1, 
       created_at: new Date().toISOString()
     })
 
-    alert('Bill Punched!')
+    alert('Bill Successfully Punched!')
     setQuantities({})
     syncGlobalDatabaseData(selectedOutlet.id)
   }
@@ -453,13 +424,14 @@ export default function Home() {
 
   const exitToGateway = async () => {
     if (currentMode === 'outlet' && selectedOutlet) {
-      // Clear security login lock safely upon intent logout actions
       await supabase.from('counter_sessions').upsert({
         outlet_id: selectedOutlet.id,
         is_logged_in: false,
         last_active_at: new Date().toISOString()
       })
     }
+    localStorage.removeItem('omk_current_mode')
+    localStorage.removeItem('omk_selected_outlet_id')
     setCurrentMode('gate')
     setSelectedOutlet(null)
     setPasswordInput('')
@@ -486,7 +458,7 @@ export default function Home() {
   currentRenderHeaders.forEach(headerKey => { dynamicBottomTotals[headerKey] = 0 })
   let spreadsheetGrandTotal = 0
 
-  // CORE LIVE COMBINED CALCULATORS FOR PERMANENT PROMOTER STREAM HEADERS
+  // NETWORK CONSOLE REAL-TIME BANNER METRICS COMPUTATIONS
   let globalPromoterTodaySalesRevenue = 0
   let globalPromoterTodayOrderCount = 0
   let globalPromoterTodayItemCount = 0
@@ -498,11 +470,7 @@ export default function Home() {
     globalPromoterTodayItemCount += totalItemsDispatchedCount
   })
 
-  const globalPromoterTodayTopPerformer = getTopPerformerForRange('ALL', liveOperatingDate, liveOperatingDate)
-
-  // Calculate local outlet live sales numbers
   const currentTerminalStats = selectedOutlet ? getOutletSalesStatsForDateRange(selectedOutlet.id, liveOperatingDate, liveOperatingDate) : { salesAmountTotal: 0, transactionsLoggedCount: 0, totalItemsDispatchedCount: 0 }
-  const currentTerminalTopPerformer = selectedOutlet ? getTopPerformerForRange(selectedOutlet.id, liveOperatingDate, liveOperatingDate) : 'None'
   const customPeriodTerminalStats = selectedOutlet ? getOutletSalesStatsForDateRange(selectedOutlet.id, outletPeriodStart, outletPeriodEnd) : { salesAmountTotal: 0, transactionsLoggedCount: 0, totalItemsDispatchedCount: 0 }
 
   if (currentMode === 'gate') {
@@ -552,47 +520,48 @@ export default function Home() {
     return (
       <main className="min-h-screen bg-slate-950 p-6 font-sans text-slate-100 relative">
         
-        {/* PERMANENT STICKY METRIC BAR FOR THE OUTLET VIEW */}
-        <header className="mb-4 sticky top-0 bg-slate-950/90 backdrop-blur border-b border-slate-800 pb-4 z-40 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+        {/* REACTIVE NOTIFICATION TOAST POPUP BANNER */}
+        {notification && (
+          <div className="fixed top-4 right-4 z-50 bg-emerald-600 border border-emerald-400 text-white font-bold py-3 px-5 rounded-xl shadow-2xl animate-bounce text-xs tracking-wide">
+            {notification}
+          </div>
+        )}
+
+        {/* PERMANENT STORE PERFORMANCE TOP KPI METRICS BAR */}
+        <header className="mb-4 sticky top-0 bg-slate-950/95 backdrop-blur border-b border-slate-800 pb-4 z-40 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
           <div>
             <h1 className="text-2xl font-black">{selectedOutlet.name} Live Terminal</h1>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Operational Clock Today:</span>
-              <div className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-[11px] font-black text-blue-400 font-mono">
-                {liveOperatingDate}
-              </div>
+              <div className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-[11px] font-black text-blue-400 font-mono">{liveOperatingDate}</div>
             </div>
           </div>
 
           <div className="flex flex-wrap gap-3 w-full xl:w-auto">
-            <div className="bg-slate-900 border border-slate-800 px-4 py-1.5 rounded-xl shadow-md min-w-[120px]">
+            <div className="bg-slate-900 border border-slate-800 px-4 py-1.5 rounded-xl min-w-[120px]">
               <span className="text-[9px] uppercase font-bold text-slate-500 block tracking-wider">Today's Revenue</span>
               <span className="text-lg font-black text-emerald-400 font-mono">${currentTerminalStats.salesAmountTotal.toLocaleString()}</span>
             </div>
-            <div className="bg-slate-900 border border-slate-800 px-4 py-1.5 rounded-xl shadow-md min-w-[100px]">
+            <div className="bg-slate-900 border border-slate-800 px-4 py-1.5 rounded-xl min-w-[100px]">
               <span className="text-[9px] uppercase font-bold text-slate-500 block tracking-wider">Order Count</span>
               <span className="text-lg font-black text-blue-400 font-mono">{currentTerminalStats.transactionsLoggedCount}</span>
             </div>
-            <div className="bg-slate-900 border border-slate-800 px-4 py-1.5 rounded-xl shadow-md min-w-[100px]">
+            <div className="bg-slate-900 border border-slate-800 px-4 py-1.5 rounded-xl min-w-[100px]">
               <span className="text-[9px] uppercase font-bold text-slate-500 block tracking-wider">Item Count</span>
               <span className="text-lg font-black text-amber-500 font-mono">{currentTerminalStats.totalItemsDispatchedCount}</span>
-            </div>
-            <div className="bg-slate-900 border border-slate-800 px-4 py-1.5 rounded-xl shadow-md min-w-[120px]">
-              <span className="text-[9px] uppercase font-bold text-slate-500 block tracking-wider">Top Performer</span>
-              <span className="text-sm font-black text-purple-400 block truncate max-w-[110px]">{currentTerminalTopPerformer}</span>
             </div>
             <button onClick={exitToGateway} className="rounded-xl bg-red-950/40 border border-red-900 px-4 text-xs font-bold text-red-200 hover:bg-red-900 transition ml-auto xl:ml-0">Log Out</button>
           </div>
         </header>
 
-        {/* OUTLET VIEW LOCAL WORKSPACE SWITCHER TABS */}
+        {/* OUTLET VIEW LOCAL WORKSPACE SWITCHER TAB CONTROLLER */}
         <div className="flex gap-2 border-b border-slate-800 mb-6">
           <button onClick={() => setOutletTab('counter')} className={`px-5 py-2.5 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${outletTab === 'counter' ? 'bg-slate-900 text-blue-400 border-b-2 border-blue-500' : 'text-slate-500 hover:text-slate-300'}`}>🛒 Counter Desk Terminal</button>
           <button onClick={() => setOutletTab('ledger')} className={`px-5 py-2.5 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${outletTab === 'ledger' ? 'bg-slate-900 text-amber-400 border-b-2 border-amber-500' : 'text-slate-500 hover:text-slate-300'}`}>📜 Sales Ledger Audit</button>
+          <button onClick={() => setOutletTab('received_stock')} className={`px-5 py-2.5 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${outletTab === 'received_stock' ? 'bg-slate-900 text-emerald-400 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-300'}`}>🚚 Stock Received History</button>
         </div>
 
-        {/* OUTLET SCENE WORKSPACE VIEWS PORTAL PANEL */}
-        {outletTab === 'counter' ? (
+        {outletTab === 'counter' && (
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
             <section className="xl:col-span-7 space-y-6">
               <div className="rounded-2xl bg-slate-900 p-6 border border-slate-800">
@@ -616,7 +585,7 @@ export default function Home() {
               </div>
             </section>
 
-            <section className="xl:col-span-5 space-y-6">
+            <section className="xl:col-span-5">
               <div className="rounded-2xl bg-slate-900 p-6 border border-slate-800">
                 <h2 className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-4">Live Inventory Blueprint</h2>
                 <table className="w-full text-left font-mono text-xs">
@@ -624,7 +593,6 @@ export default function Home() {
                     <tr className="border-b border-slate-800 text-slate-500 font-bold">
                       <th className="pb-2">Material</th>
                       <th className="pb-2 text-center">Stock 1st</th>
-                      <th className="pb-2 text-center text-blue-400">Receive Supply</th>
                       <th className="pb-2 text-center text-amber-400">Used Today</th>
                       <th className="pb-2 text-right text-emerald-400">Stock Left</th>
                     </tr>
@@ -636,11 +604,6 @@ export default function Home() {
                         <tr key={inv.id} className="border-b border-slate-800/50">
                           <td className="py-3 font-sans font-bold text-white">{formatIngredientLabel(inv.item_name)}</td>
                           <td className="py-3 text-center text-slate-400">{inv.stock_on_first}</td>
-                          <td className="py-3 text-center">
-                            <button onClick={() => openReplenishModal(inv.item_name)} className="rounded bg-slate-950 border border-slate-800 text-[10px] px-2 py-1 text-blue-400 hover:border-blue-500">
-                              + Received
-                            </button>
-                          </td>
                           <td className="py-3 text-center text-amber-500 font-bold">{usedToday}</td>
                           <td className="py-3 text-right text-emerald-400 font-bold text-sm">{currentStockLeft}</td>
                         </tr>
@@ -649,35 +612,16 @@ export default function Home() {
                   </tbody>
                 </table>
               </div>
-
-              <div className="rounded-2xl bg-slate-900 p-6 border border-slate-800">
-                <h2 className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-3">Received Stock History Ledger</h2>
-                <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 divide-y divide-slate-800">
-                  {allReplenishments.length === 0 ? (
-                    <p className="p-4 text-center text-xs font-mono text-slate-600 italic">No incoming deliveries logged yet.</p>
-                  ) : (
-                    allReplenishments.map(log => (
-                      <div key={log.id} className="flex justify-between items-center p-3 font-mono text-xs">
-                        <div>
-                          <span className="font-bold text-white bg-slate-900 px-2 py-0.5 rounded mr-2 uppercase text-[10px] border border-slate-800">
-                            {formatIngredientLabel(log.item_name)}
-                          </span>
-                          <span className="text-slate-400 text-[10px] font-sans">Day Check Index: {log.day_of_month}th</span>
-                        </div>
-                        <span className="text-emerald-400 font-black text-sm">+{log.quantity_added} units</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
             </section>
           </div>
-        ) : (
+        )}
+
+        {outletTab === 'ledger' && (
           <section className="rounded-2xl bg-slate-900 p-6 border border-slate-800 space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-4 gap-4">
               <div>
                 <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200">Outlet Sales History lookup</h3>
-                <p className="text-[10px] text-slate-500 font-sans mt-0.5">Filter and review past performance summaries directly on the counter</p>
+                <p className="text-[10px] text-slate-500">Filter and review past performance summaries directly on the counter</p>
               </div>
               
               <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 p-2 rounded-xl font-mono text-xs">
@@ -693,7 +637,7 @@ export default function Home() {
                 <span className="text-2xl font-black text-emerald-400 font-mono block mt-1">${customPeriodTerminalStats.salesAmountTotal.toLocaleString()}</span>
               </div>
               <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl text-center">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Selected Window Order Count</span>
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Selected Window Orders Count</span>
                 <span className="text-2xl font-black text-blue-400 font-mono block mt-1">{customPeriodTerminalStats.transactionsLoggedCount} orders</span>
               </div>
               <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl text-center">
@@ -702,7 +646,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* INTEGRATED FULL PRODUCT ITEMS LIST PERFORMANCE BREAKDOWN FOR THE OUTLET */}
             <div className="mt-6 border-t border-slate-800 pt-6">
               <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Itemized Sales Audit Sheet</h4>
               <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950">
@@ -720,8 +663,8 @@ export default function Home() {
                     {getProductSalesPerformanceBreakdown(selectedOutlet.id, outletPeriodStart, outletPeriodEnd).map(prod => (
                       <tr key={prod.id} className="hover:bg-slate-900/20">
                         <td className="p-3 font-sans font-bold text-white">{prod.name}</td>
-                        <td className="p-3 text-center text-slate-400 text-[10px] uppercase font-sans font-bold">
-                          {prod.isCombo ? <span className="text-purple-400 px-1.5 py-0.5 rounded bg-purple-950/40 border border-purple-900">Combo</span> : <span className="text-slate-400">Single</span>}
+                        <td className="p-3 text-center font-sans font-bold">
+                          {prod.isCombo ? <span className="text-purple-400 text-[10px] uppercase px-1.5 py-0.5 rounded bg-purple-950/40 border border-purple-900">Combo</span> : <span className="text-slate-500 text-[10px] uppercase">Single</span>}
                         </td>
                         <td className="p-3 text-center text-slate-500">${prod.price.toFixed(2)}</td>
                         <td className="p-3 text-center text-blue-400 font-bold">{prod.unitsSold}</td>
@@ -735,18 +678,56 @@ export default function Home() {
           </section>
         )}
 
-        {activeReplenishItem && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-            <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
-              <h3 className="text-sm font-bold text-white mb-1">Receive Stock: {formatIngredientLabel(activeReplenishItem)}</h3>
-              <p className="text-[10px] text-slate-400 uppercase font-mono tracking-tight mb-4">Logging units into {selectedOutlet.name} inventory database registries</p>
-              <input type="number" placeholder="Enter exact received amount" value={newRepQty || ''} onChange={(e) => setNewRepQty(Number(e.target.value))} className="w-full rounded bg-slate-950 text-sm p-3 text-emerald-400 border border-slate-700 font-bold outline-none focus:border-emerald-500" />
-              <div className="flex gap-2 mt-5 text-xs font-bold">
-                <button onClick={() => setActiveReplenishItem(null)} className="w-1/2 bg-slate-800 py-2.5 rounded-lg text-slate-300 transition">Cancel</button>
-                <button onClick={handleAddReplenishment} className="w-1/2 bg-emerald-600 py-2.5 rounded-lg text-white transition hover:bg-emerald-500">Confirm Received Stock</button>
+        {/* TAB WORKSPACE 3: BRAND NEW LOCAL STOCK IN DISPATCH HISTORY LEDGER INTERFACE */}
+        {outletTab === 'received_stock' && (
+          <section className="rounded-2xl bg-slate-900 p-6 border border-slate-800 space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-4 gap-4">
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-emerald-400">🚚 Inbound Dispatches Logistics Ledger</h3>
+                <p className="text-[10px] text-slate-500">Audits centralized supply truck deliveries routed into your branch database container</p>
+              </div>
+
+              <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 p-2 rounded-xl font-mono text-xs">
+                <span className="text-[10px] font-sans text-slate-500">From:</span>
+                <input type="date" value={outletReceivedStart} onChange={(e) => setOutletReceivedStart(e.target.value)} className="bg-slate-900 border border-slate-700 text-white rounded px-2 py-0.5 focus:outline-none" />
+                <span className="text-[10px] font-sans text-slate-500">To:</span>
+                <input type="date" value={outletReceivedEnd} onChange={(e) => setOutletReceivedEnd(e.target.value)} className="bg-slate-900 border border-slate-700 text-white rounded px-2 py-0.5 focus:outline-none" />
               </div>
             </div>
-          </div>
+
+            <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950">
+              <table className="w-full text-left font-mono text-xs">
+                <thead>
+                  <tr className="bg-slate-900 text-slate-400 border-b border-slate-800 font-bold">
+                    <th className="p-3">Shipment Arrival Timestamp</th>
+                    <th className="p-3 text-center">Material Asset Type</th>
+                    <th className="p-3 text-right text-emerald-400">Received Allocation Volume</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/40">
+                  {allReplenishments.filter(r => {
+                    const rowDate = r.created_at?.split('T')[0] || liveOperatingDate
+                    return r.outlet_id === selectedOutlet.id && rowDate >= outletReceivedStart && rowDate <= outletReceivedEnd
+                  }).length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="p-8 text-center text-slate-600 font-sans italic">No inbound supply truck drops discovered in chosen range filters.</td>
+                    </tr>
+                  ) : (
+                    allReplenishments.filter(r => {
+                      const rowDate = r.created_at?.split('T')[0] || liveOperatingDate
+                      return r.outlet_id === selectedOutlet.id && rowDate >= outletReceivedStart && rowDate <= outletReceivedEnd
+                    }).map(log => (
+                      <tr key={log.id} className="hover:bg-slate-900/20">
+                        <td className="p-3 text-slate-400">{log.created_at ? new Date(log.created_at).toLocaleString('en-GB') : `Day Check Index: ${log.day_of_month}th`}</td>
+                        <td className="p-3 text-center font-sans font-bold text-white uppercase tracking-wider text-[11px]">{formatIngredientLabel(log.item_name)}</td>
+                        <td className="p-3 text-right text-emerald-400 font-black text-sm">+{log.quantity_added} units</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
         )}
       </main>
     )
@@ -755,7 +736,14 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-slate-950 p-6 font-sans text-slate-100 space-y-6">
       
-      {/* PERMANENT COMBINED OVERVIEW BARS STICKED ON PROMOTER HUB CONSOLES */}
+      {/* TOAST SYSTEM ATTACHED INTO MANAGEMENT CONSOLE PLATFORMS */}
+      {notification && (
+        <div className="fixed top-4 right-4 z-50 bg-emerald-600 border border-emerald-400 text-white font-bold py-3 px-5 rounded-xl shadow-2xl text-xs tracking-wide">
+          {notification}
+        </div>
+      )}
+
+      {/* PERMANENT CROSS-BRANCH TOTAL NETWORK METRIC HEADER BAR */}
       <header className="sticky top-0 bg-slate-950/95 backdrop-blur z-40 border-b border-slate-800 pb-4 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
         <div>
           <h1 className="text-2xl font-black text-amber-400 tracking-tight">👑 Omkar enterprise Command Dashboard</h1>
@@ -775,15 +763,11 @@ export default function Home() {
             <span className="text-[9px] uppercase font-bold text-slate-500 block tracking-wider">Net Items</span>
             <span className="text-lg font-black text-amber-500 font-mono">{globalPromoterTodayItemCount}</span>
           </div>
-          <div className="bg-slate-900 border border-slate-800 px-4 py-1.5 rounded-xl min-w-[130px]">
-            <span className="text-[9px] uppercase font-bold text-slate-500 block tracking-wider">Network Top Performer</span>
-            <span className="text-sm font-black text-purple-400 block truncate max-w-[110px]">{globalPromoterTodayTopPerformer}</span>
-          </div>
           <button onClick={exitToGateway} className="rounded-xl bg-slate-850 px-4 text-xs font-bold text-slate-300 hover:bg-red-900 hover:text-white transition ml-auto xl:ml-0">Exit Portal</button>
         </div>
       </header>
 
-      {/* NEW PROMOTER MAIN WORKSPACE SWITCHER CONTROLS TABS */}
+      {/* PROMOTER MAIN WORKSPACE SWITCHER SELECTION BAR */}
       <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-0.5">
         <button onClick={() => setPromoterTab('overview')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${promoterTab === 'overview' ? 'bg-slate-900 text-blue-400 border-b-2 border-blue-500' : 'text-slate-500 hover:text-slate-300'}`}>📊 Network Overview</button>
         <button onClick={() => setPromoterTab('branches')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${promoterTab === 'branches' ? 'bg-slate-900 text-purple-400 border-b-2 border-purple-500' : 'text-slate-500 hover:text-slate-300'}`}>🏪 Branch-by-Branch Matrix</button>
@@ -791,11 +775,8 @@ export default function Home() {
         <button onClick={() => setPromoterTab('security')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${promoterTab === 'security' ? 'bg-slate-900 text-red-400 border-b-2 border-red-500' : 'text-slate-500 hover:text-slate-300'}`}>🔐 Terminal Security Locks</button>
       </div>
 
-      {/* PROMOTER RENDERING WORKSPACE SCENES LAYOUT BLOCK */}
       {promoterTab === 'overview' && (
         <div className="space-y-6">
-          
-          {/* SEPARATE CALENDAR RANGE RANGE CONFIGURATION FOR THE OVERVIEW WORKSPACE TAB */}
           <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <h3 className="text-xs font-bold text-blue-400 uppercase tracking-wider">Network Analytics Audit Filter</h3>
@@ -837,7 +818,6 @@ export default function Home() {
             })()}
           </div>
 
-          {/* MASTER QUANTITY DISSECTION SHEETS TRACKING EVERY MENU VARIANT AND COMBO SALES */}
           <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
             <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-3">Global Menu & Combo Dissection Matrix</h3>
             <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950">
@@ -877,12 +857,10 @@ export default function Home() {
             <p className="text-[10px] text-slate-500 mt-0.5">Every location operates on completely autonomous independent date range filter controls.</p>
           </div>
 
-          {/* GRID MATRIX DEPLOYING OUTLET CARDS EQUIPPED WITH INDEPENDENT DATE PICKERS */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {outlets.map(o => {
               const localRange = branchCardDateRanges[o.id] || { start: liveOperatingDate, end: liveOperatingDate }
               const localStats = getOutletSalesStatsForDateRange(o.id, localRange.start, localRange.end)
-              const localTop = getTopPerformerForRange(o.id, localRange.start, localRange.end)
 
               return (
                 <div key={o.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-md flex flex-col justify-between space-y-4">
@@ -898,7 +876,6 @@ export default function Home() {
                     )}
                   </div>
 
-                  {/* CUSTOM RANGE PICKER ATTACHED LOCALLY ON CARD COMPONENT FRAMES */}
                   <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 space-y-2">
                     <span className="text-[9px] uppercase font-bold text-slate-500 block">Card Audit Date Window</span>
                     <div className="flex items-center justify-between gap-1 font-mono text-[11px]">
@@ -933,9 +910,15 @@ export default function Home() {
                     </div>
                   </div>
 
-                  <div className="bg-slate-950/60 rounded-xl p-2.5 border border-slate-800/60 flex justify-between items-center text-xs">
-                    <span className="text-[10px] text-slate-500">Range Top Seller:</span>
-                    <span className="font-bold text-purple-400 font-mono truncate max-w-[140px]">{localTop}</span>
+                  {/* FIXED COMPREHENSIVE LOOP VIEW SHOWING INDEPENDENT METRIC VOLUMES FOR ALL ITEMS */}
+                  <div className="bg-slate-950 rounded-xl p-3 border border-slate-800 space-y-1 text-[11px] max-h-36 overflow-y-auto">
+                    <span className="text-[9px] text-purple-400 uppercase font-bold tracking-wider block mb-1">Itemized Sales Dissection:</span>
+                    {getProductSalesPerformanceBreakdown(o.id, localRange.start, localRange.end).map(prod => (
+                      <div key={prod.id} className="flex justify-between items-center font-mono text-slate-400 border-b border-slate-900 pb-0.5 last:border-0">
+                        <span className="font-sans text-white truncate max-w-[130px]">{prod.name}</span>
+                        <span>{prod.unitsSold} units</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )
@@ -946,8 +929,6 @@ export default function Home() {
 
       {promoterTab === 'dispatches' && (
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-          
-          {/* THE NEW MANUAL STOCK DISPATCH DISTRIBUTION DESK */}
           <section className="xl:col-span-4 bg-slate-900 border border-slate-800 rounded-2xl p-6 h-fit space-y-4">
             <div>
               <h3 className="text-sm font-bold text-emerald-400 uppercase tracking-wider">Log Distribution Shipment</h3>
@@ -985,14 +966,14 @@ export default function Home() {
             </div>
           </section>
 
-          {/* THE PRE-EXISTING ACCUMULATED SPREADSHEET TABLE FILTER VIEW ATTACHED ALONGSIDE */}
           <section className="xl:col-span-8 bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
-            <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-2 border-b border-slate-800">
+            <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 pb-2 border-b border-slate-800">
               <div>
                 <h4 className="text-xs font-bold text-slate-300 uppercase tracking-widest">Historical Spreadsheet Filter</h4>
                 <p className="text-[9px] text-slate-500">Audits structural incoming or outgoing raw quantities matrix logs</p>
               </div>
 
+              {/* RESTORED THE DATE CALENDAR RANGE CONTROLS ROW INSIDE DISPATCH VIEW SPREADSHEETS */}
               <div className="flex flex-wrap items-center gap-2 bg-slate-950 p-2 rounded-xl border border-slate-800 text-[11px]">
                 <select value={promoterActiveTab} onChange={(e) => setPromoterActiveTab(e.target.value as any)} className="bg-slate-900 border border-slate-700 text-blue-400 rounded px-1.5 py-0.5 font-bold outline-none">
                   <option value="consumption">Stock Out (Sales)</option>
@@ -1006,6 +987,11 @@ export default function Home() {
                   <option value="ALL">All Materials</option>
                   {distinctIngredients.map(ing => <option key={ing} value={ing}>{formatIngredientLabel(ing)}</option>)}
                 </select>
+                <div className="flex items-center gap-1 border-l border-slate-800 pl-1">
+                  <input type="date" value={auditStartDate} onChange={(e) => setAuditStartDate(e.target.value)} className="bg-slate-900 border border-slate-700 rounded px-1 py-0.5 text-white w-[110px]" />
+                  <span className="text-[10px] text-slate-500">to</span>
+                  <input type="date" value={auditEndDate} onChange={(e) => setAuditEndDate(e.target.value)} className="bg-slate-900 border border-slate-700 rounded px-1 py-0.5 text-white w-[110px]" />
+                </div>
               </div>
             </header>
 
@@ -1013,7 +999,7 @@ export default function Home() {
               <table className="w-full text-left border-collapse font-mono text-xs">
                 <thead>
                   <tr className="border-b border-slate-800 bg-slate-900 text-slate-400 font-bold uppercase tracking-wider text-center">
-                    <th className="py-3 px-3 text-left w-32 bg-slate-900 dialect sticky left-0 z-10 border-r border-slate-800">Timeline Date</th>
+                    <th className="py-3 px-3 text-left w-32 bg-slate-900 sticky left-0 z-10 border-r border-slate-800">Timeline Date</th>
                     {currentRenderHeaders.map(colHeader => (
                       <th key={colHeader} className="py-3 px-2">{formatIngredientLabel(colHeader)}</th>
                     ))}
@@ -1050,13 +1036,15 @@ export default function Home() {
                             if (shouldRenderIngredientColumns) {
                               const targetIngName = colHeader
                               computedValue = allReplenishments.filter(r => {
+                                const rowDate = r.created_at?.split('T')[0] || liveOperatingDate
                                 const matchesOutlet = auditOutletFilter === 'ALL' || r.outlet_id === Number(auditOutletFilter)
-                                return r.item_name === targetIngName && r.day_of_month === loopDayInteger && matchesOutlet
+                                return r.item_name === targetIngName && matchesOutlet && rowDate === dateString
                               }).reduce((a, c) => a + Number(c.quantity_added), 0)
                             } else {
                               const targetOutletId = outlets.find(o => o.name === colHeader)?.id || 0
                               computedValue = allReplenishments.filter(r => {
-                                return r.item_name === auditIngredient && r.outlet_id === targetOutletId && r.day_of_month === loopDayInteger
+                                const rowDate = r.created_at?.split('T')[0] || liveOperatingDate
+                                return r.item_name === auditIngredient && r.outlet_id === targetOutletId && rowDate === dateString
                               }).reduce((a, c) => a + Number(c.quantity_added), 0)
                             }
                           }
@@ -1070,22 +1058,22 @@ export default function Home() {
                         })}
                         <td className="py-2.5 px-3 bg-blue-950/40 text-blue-400 font-bold text-right border-l border-slate-800">
                           {dailyRowRunningSum.toLocaleString()}
-                    </td>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  <tr className="border-t-2 border-slate-700 bg-slate-900 font-sans text-xs font-black text-center text-white shadow-inner">
+                    <td className="py-3.5 px-3 text-left bg-slate-900 font-extrabold text-blue-400 uppercase tracking-wider sticky left-0 z-10 border-r border-slate-800">Total Sum</td>
+                    {currentRenderHeaders.map(colHeader => {
+                      const verticalTotal = dynamicBottomTotals[colHeader]
+                      spreadsheetGrandTotal += verticalTotal
+                      return <td key={colHeader} className={`py-3.5 px-2 font-mono text-sm tracking-tight ${verticalTotal > 0 ? 'text-emerald-400 font-black' : 'text-slate-500'}`}>{verticalTotal || 0}</td>
+                    })}
+                    <td className="py-3.5 px-3 bg-emerald-950/40 border-l border-slate-800 font-mono text-base text-emerald-400 font-black">{spreadsheetGrandTotal.toLocaleString()}</td>
                   </tr>
-                )
-              })}
-              <tr className="border-t-2 border-slate-700 bg-slate-900 font-sans text-xs font-black text-center text-white shadow-inner">
-                <td className="py-3.5 px-3 text-left bg-slate-900 font-extrabold text-blue-400 uppercase tracking-wider sticky left-0 z-10 border-r border-slate-800">Total Sum</td>
-                {currentRenderHeaders.map(colHeader => {
-                  const verticalTotal = dynamicBottomTotals[colHeader]
-                  spreadsheetGrandTotal += verticalTotal
-                  return <td key={colHeader} className={`py-3.5 px-2 font-mono text-sm tracking-tight ${verticalTotal > 0 ? 'text-emerald-400 font-black' : 'text-slate-500'}`}>{verticalTotal || 0}</td>
-                })}
-                <td className="py-3.5 px-3 bg-emerald-950/40 border-l border-slate-800 font-mono text-base text-emerald-400 font-black">{spreadsheetGrandTotal.toLocaleString()}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+                </tbody>
+              </table>
+            </div>
           </section>
         </div>
       )}

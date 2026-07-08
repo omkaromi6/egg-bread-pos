@@ -39,6 +39,7 @@ interface SalesLog {
   outlet_id: number
   item_name: string
   quantity_sold: number
+  date_string: string // Clean localized calendar string used to dodge UTC/timezone stall blocks
   created_at: string
 }
 
@@ -46,6 +47,7 @@ interface TerminalSession {
   outlet_id: number
   is_logged_in: boolean
   last_active_at: string
+  device_token?: string
 }
 
 export default function Home() {
@@ -155,6 +157,17 @@ export default function Home() {
     return name
   }
 
+  // GENERATE UNIQUE LOCAL BROWSER INSTANCE SIGNATURES TO BLOCK CONCURRENT TERMINAL LOGINS
+  const getOrCreateDeviceSignatureToken = () => {
+    if (typeof window === 'undefined') return ''
+    let token = localStorage.getItem('omk_device_signature_token')
+    if (!token) {
+      token = 'dev_hash_' + Math.random().toString(36).substring(2, 15) + Date.now()
+      localStorage.setItem('omk_device_signature_token', token)
+    }
+    return token
+  }
+
   // PERSIST WORKSPACE SESSION PREFERENCES UPON BROWSER PAGE RELOADS
   useEffect(() => {
     const savedMode = localStorage.getItem('omk_current_mode')
@@ -181,21 +194,26 @@ export default function Home() {
 
   useEffect(() => {
     if (currentMode === 'outlet' && selectedOutlet) {
+      const currentDeviceToken = getOrCreateDeviceSignatureToken()
+      
       const maintainHeartbeatAndPollAlerts = async () => {
         const { data } = await supabase.from('counter_sessions').select('*').eq('outlet_id', selectedOutlet.id).maybeSingle()
-        if (data && !data.is_logged_in) {
-          alert('This counter terminal session has been remotely cleared by Management.')
+        
+        // BOOT SCREEN INITIATION: Eject session if device keys mismatch or managed cleared
+        if (data && (!data.is_logged_in || (data.device_token && data.device_token !== currentDeviceToken))) {
+          alert('Security Alert: This session has been accessed on another physical layout device or force-cleared.')
           exitToGateway()
         } else {
           await supabase.from('counter_sessions').upsert({
             outlet_id: selectedOutlet.id,
             is_logged_in: true,
-            last_active_at: new Date().toISOString()
+            last_active_at: new Date().toISOString(),
+            device_token: currentDeviceToken
           })
         }
       }
       maintainHeartbeatAndPollAlerts()
-      const hbInterval = setInterval(maintainHeartbeatAndPollAlerts, 15000)
+      const hbInterval = setInterval(maintainHeartbeatAndPollAlerts, 10000)
       syncGlobalDatabaseData(selectedOutlet.id)
       return () => clearInterval(hbInterval)
     } else if (currentMode === 'promoter') {
@@ -251,13 +269,14 @@ export default function Home() {
         
         // INTERROGATE LIVE STATUS FIRST TO ENFORCE MULTI-DEVICE PROTECTION
         const { data: liveSessionCheck } = await supabase.from('counter_sessions').select('*').eq('outlet_id', selectedOutlet.id).maybeSingle()
+        const currentDeviceToken = getOrCreateDeviceSignatureToken()
         
-        if (liveSessionCheck && liveSessionCheck.is_logged_in) {
+        if (liveSessionCheck && liveSessionCheck.is_logged_in && liveSessionCheck.device_token !== currentDeviceToken) {
           const pastActiveTimestamp = new Date(liveSessionCheck.last_active_at).getTime()
           const exactMinutesDiff = (Date.now() - pastActiveTimestamp) / 1000 / 60
           
-          if (exactMinutesDiff < 15) {
-            setErrorMessage(`Access Blocked: Terminal is actively open on another physical terminal layout right now.`);
+          if (exactMinutesDiff < 5) {
+            setErrorMessage(`Access Blocked: This counter terminal is currently open on another physical screen.`);
             return
           }
         }
@@ -265,7 +284,8 @@ export default function Home() {
         await supabase.from('counter_sessions').upsert({
           outlet_id: selectedOutlet.id,
           is_logged_in: true,
-          last_active_at: new Date().toISOString()
+          last_active_at: new Date().toISOString(),
+          device_token: currentDeviceToken
         })
 
         setCurrentMode('outlet')
@@ -283,7 +303,8 @@ export default function Home() {
     await supabase.from('counter_sessions').upsert({
       outlet_id: outletId,
       is_logged_in: false,
-      last_active_at: new Date().toISOString()
+      last_active_at: new Date().toISOString(),
+      device_token: ''
     })
     const { data } = await supabase.from('counter_sessions').select('*')
     if (data) setTerminalSessions(data)
@@ -297,32 +318,54 @@ export default function Home() {
       return matchesOutlet && matchesName
     }).reduce((a, c) => a + Number(c.quantity_added), 0)
 
-    const totalUsedEver = allSalesHistory.filter(s => s.item_name === itemName && s.outlet_id === targetOutletId).reduce((a, c) => a + Number(c.quantity_sold), 0)
+    const totalUsedEver = allSalesHistory.filter(s => {
+      // Ingredient deduction matching keys
+      if (distinctIngredients.includes(s.item_name)) {
+        return s.item_name === itemName && s.outlet_id === targetOutletId
+      }
+      // If menu item match, translate usage via recipes
+      const menuRef = menuItems.find(m => m.name === s.item_name)
+      const ingUsage = menuRef?.recipe.find(r => r.ingredient === itemName)?.qty || 0
+      return s.outlet_id === targetOutletId && ingUsage > 0
+    }).reduce((a, c) => {
+      if (distinctIngredients.includes(c.item_name)) return a + Number(c.quantity_sold)
+      const menuRef = menuItems.find(m => m.name === c.item_name)
+      const ingUsage = menuRef?.recipe.find(r => r.ingredient === itemName)?.qty || 0
+      return a + (Number(c.quantity_sold) * ingUsage)
+    }, 0)
     
     const usedToday = allSalesHistory.filter(s => {
-      const matchDate = s.created_at.split('T')[0]
-      return s.item_name === itemName && s.outlet_id === targetOutletId && matchDate === liveOperatingDate
-    }).reduce((a, c) => a + Number(c.quantity_sold), 0)
+      const matchesDate = s.date_string === liveOperatingDate
+      if (!matchesDate || s.outlet_id !== targetOutletId) return false
+      if (s.item_name === itemName) return true
+      const menuRef = menuItems.find(m => m.name === s.item_name)
+      return (menuRef?.recipe.find(r => r.ingredient === itemName)?.qty || 0) > 0
+    }).reduce((a, c) => {
+      if (c.item_name === itemName) return a + Number(c.quantity_sold)
+      const menuRef = menuItems.find(m => m.name === c.item_name)
+      const ingUsage = menuRef?.recipe.find(r => r.ingredient === itemName)?.qty || 0
+      return a + (Number(c.quantity_sold) * ingUsage)
+    }, 0)
 
     const currentStockLeft = Number(baseStock) + totalReplenished - totalUsedEver
     return { usedToday, currentStockLeft }
   }
 
-  // SEPARATING ATOMIC ITEM SUBTRACTION BALANCES FROM ABSOLUTE ORDER COUNTS
+  // UNIFIED DYNAMIC METRIC ENGINE OPERATING OFF UNBIASED SYSTEM OVERRIDES
   const getOutletSalesStatsForDateRange = (targetOutletId: number, startDay: string, endDay: string) => {
     let salesAmountTotal = 0
     let transactionsLoggedCount = 0
     let totalItemsDispatchedCount = 0
 
     allSalesHistory.forEach(s => {
-      const recordDate = s.created_at.split('T')[0]
-      if (s.outlet_id === targetOutletId && recordDate >= startDay && recordDate <= endDay) {
-        // EXACT ORDER COUNT RULE: 1 distinct 'Boxes' record entry maps exactly to 1 complete billing action checkout click
+      if (s.outlet_id === targetOutletId && s.date_string >= startDay && s.date_string <= endDay) {
+        // EXACT ATOMIC COUNT ANCHOR: Tracks individual 'Boxes' row submissions to increase order count cleanly by +1
         if (s.item_name === 'Boxes') {
           transactionsLoggedCount += s.quantity_sold
-          salesAmountTotal += (s.quantity_sold * 12)
-        } else {
+        } else if (!distinctIngredients.includes(s.item_name)) {
+          // If it's a direct menu variant, calculate financial revenue additions
           totalItemsDispatchedCount += s.quantity_sold
+          salesAmountTotal += (s.quantity_sold * (menuItems.find(m => m.name === s.item_name)?.price || 0))
         }
       }
     })
@@ -330,29 +373,27 @@ export default function Home() {
     return { salesAmountTotal, transactionsLoggedCount, totalItemsDispatchedCount }
   }
 
-  // ITEM SALES DECONSTRUCTION PARSER LISTING DYNAMIC OUTLET PERFORMANCE DATA
+  // DYNAMIC MENU SALES LOG BREAKDOWN: Pulls directly from stored actual menu titles
   const getProductSalesPerformanceBreakdown = (targetOutletId: number | 'ALL', startDay: string, endDay: string) => {
     return menuItems.map(menuItem => {
-      let unitsSold = 0
-      allSalesHistory.forEach(s => {
-        const recordDate = s.created_at.split('T')[0]
+      const unitsSold = allSalesHistory.filter(s => {
         const matchesOutlet = targetOutletId === 'ALL' || s.outlet_id === targetOutletId
-        if (matchesOutlet && recordDate >= startDay && recordDate <= endDay) {
-          if (menuItem.isCombo && s.item_name === 'Egg' && menuItem.recipe.some(r => r.ingredient === 'Egg')) {
-            unitsSold = Math.max(unitsSold, Math.floor(s.quantity_sold / 3)) 
-          } else if (!menuItem.isCombo && s.item_name === menuItem.recipe[0]?.ingredient) {
-            unitsSold += Math.floor(s.quantity_sold * 0.5)
-          }
-        }
-      })
-      if (unitsSold === 0) {
-        unitsSold = Math.abs((startDay.charCodeAt(startDay.length - 1) || 1) * menuItem.price % 10)
-      }
+        const matchesRange = s.date_string >= startDay && s.date_string <= endDay
+        return s.item_name === menuItem.name && matchesOutlet && matchesRange
+      }).reduce((a, c) => a + Number(c.quantity_sold), 0)
+
       return { ...menuItem, unitsSold, itemRevenue: unitsSold * menuItem.price }
     })
   }
 
-  // EXECUTE MASTER TRUCK SUPPLY DISPATCH DISTRIBUTION DROP LOGISTICS
+  // COMPUTE HIGH VELOCITY HERO PRODUCT IDENTIFIERS FOR HIGHLIGHT PILLS
+  const getTopPerformerLabel = (targetOutletId: number | 'ALL', startDay: string, endDay: string) => {
+    const list = getProductSalesPerformanceBreakdown(targetOutletId, startDay, endDay)
+    const sorted = [...list].sort((a, b) => b.unitsSold - a.unitsSold)
+    return sorted[0] && sorted[0].unitsSold > 0 ? sorted[0].name : 'None'
+  }
+
+  // CENTRAL MATERIAL DISPATCH EXECUTION CONTROLLER
   const handleExecuteStockDispatch = async () => {
     if (dispatchQty <= 0) return alert('Please enter a valid stock volume amount')
     
@@ -363,7 +404,7 @@ export default function Home() {
       item_name: dispatchItemName,
       day_of_month: dayIndexInteger,
       quantity_added: dispatchQty,
-      created_at: new Date(dispatchDate).toISOString() // Records standard query matching timestamp values
+      created_at: new Date(dispatchDate).toISOString()
     })
 
     triggerAlertPushBanner(`Stock Dispatch Successfully Received & Computed! Sent +${dispatchQty} units to Outlet ${dispatchOutletId}.`)
@@ -390,25 +431,28 @@ export default function Home() {
     }
     if (shortItem) return alert(`Insufficient quantities for ${formatIngredientLabel(shortItem)}`)
 
-    // Record separate ingredient consumer item rows safely
-    for (const inv of inventory) {
-      const deduction = totalNeeded[inv.item_name] || 0
-      if (deduction > 0 && inv.item_name !== 'Boxes') {
+    const activeLocalStamp = getTodayDateString()
+
+    // Write real structural menu selection line records directly into database logs
+    for (const item of menuItems) {
+      const selectedVolumeCount = quantities[item.id] || 0
+      if (selectedVolumeCount > 0) {
         await supabase.from('sales_history').insert({
           outlet_id: selectedOutlet.id,
-          item_name: inv.item_name,
-          quantity_sold: deduction,
-          eggs_consumed: inv.item_name === 'Egg' ? deduction : 0,
+          item_name: item.name,
+          quantity_sold: selectedVolumeCount,
+          date_string: activeLocalStamp,
           created_at: new Date().toISOString()
         })
       }
     }
 
-    // UNIQUE ORDER SNAPSHOT: Writes 1 single tracking token to 'Boxes' per click to calculate true non-skewed order totals
+    // UNIQUE ATOMIC ORDER TRACKER ROW: Anchor token mapping explicitly to 'Boxes' to secure perfect unskewed transaction metrics
     await supabase.from('sales_history').insert({
       outlet_id: selectedOutlet.id,
       item_name: 'Boxes',
       quantity_sold: 1, 
+      date_string: activeLocalStamp,
       created_at: new Date().toISOString()
     })
 
@@ -427,7 +471,8 @@ export default function Home() {
       await supabase.from('counter_sessions').upsert({
         outlet_id: selectedOutlet.id,
         is_logged_in: false,
-        last_active_at: new Date().toISOString()
+        last_active_at: new Date().toISOString(),
+        device_token: ''
       })
     }
     localStorage.removeItem('omk_current_mode')
@@ -458,7 +503,7 @@ export default function Home() {
   currentRenderHeaders.forEach(headerKey => { dynamicBottomTotals[headerKey] = 0 })
   let spreadsheetGrandTotal = 0
 
-  // NETWORK CONSOLE REAL-TIME BANNER METRICS COMPUTATIONS
+  // CALCULATION MATRIX: Central aggregate tracker
   let globalPromoterTodaySalesRevenue = 0
   let globalPromoterTodayOrderCount = 0
   let globalPromoterTodayItemCount = 0
@@ -520,20 +565,27 @@ export default function Home() {
     return (
       <main className="min-h-screen bg-slate-950 p-6 font-sans text-slate-100 relative">
         
-        {/* REACTIVE NOTIFICATION TOAST POPUP BANNER */}
         {notification && (
           <div className="fixed top-4 right-4 z-50 bg-emerald-600 border border-emerald-400 text-white font-bold py-3 px-5 rounded-xl shadow-2xl animate-bounce text-xs tracking-wide">
             {notification}
           </div>
         )}
 
-        {/* PERMANENT STORE PERFORMANCE TOP KPI METRICS BAR */}
+        {/* OUTLET CORE METRICS SUMMARY DISPLAY PANEL */}
         <header className="mb-4 sticky top-0 bg-slate-950/95 backdrop-blur border-b border-slate-800 pb-4 z-40 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
-          <div>
-            <h1 className="text-2xl font-black">{selectedOutlet.name} Live Terminal</h1>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Operational Clock Today:</span>
-              <div className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-[11px] font-black text-blue-400 font-mono">{liveOperatingDate}</div>
+          <div className="flex items-center gap-4">
+            <div>
+              <h1 className="text-2xl font-black">{selectedOutlet.name} Live Terminal</h1>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Operational Clock Today:</span>
+                <div className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-[11px] font-black text-blue-400 font-mono">{liveOperatingDate}</div>
+              </div>
+            </div>
+            
+            {/* RESTORED OUTLET WORKSPACE TOP PERFORMER DISPLAY COMPONENT */}
+            <div className="bg-gradient-to-r from-purple-950/40 to-blue-950/30 border border-purple-900/60 px-4 py-2 rounded-xl hidden sm:block">
+              <span className="text-[9px] uppercase font-black text-purple-400 block tracking-widest">Outlet Top Performer</span>
+              <span className="text-xs font-extrabold text-white font-sans">{getTopPerformerLabel(selectedOutlet.id, liveOperatingDate, liveOperatingDate)}</span>
             </div>
           </div>
 
@@ -554,7 +606,7 @@ export default function Home() {
           </div>
         </header>
 
-        {/* OUTLET VIEW LOCAL WORKSPACE SWITCHER TAB CONTROLLER */}
+        {/* OUTLET SWITCHER SELECTION TABS BAR */}
         <div className="flex gap-2 border-b border-slate-800 mb-6">
           <button onClick={() => setOutletTab('counter')} className={`px-5 py-2.5 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${outletTab === 'counter' ? 'bg-slate-900 text-blue-400 border-b-2 border-blue-500' : 'text-slate-500 hover:text-slate-300'}`}>🛒 Counter Desk Terminal</button>
           <button onClick={() => setOutletTab('ledger')} className={`px-5 py-2.5 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${outletTab === 'ledger' ? 'bg-slate-900 text-amber-400 border-b-2 border-amber-500' : 'text-slate-500 hover:text-slate-300'}`}>📜 Sales Ledger Audit</button>
@@ -678,7 +730,6 @@ export default function Home() {
           </section>
         )}
 
-        {/* TAB WORKSPACE 3: BRAND NEW LOCAL STOCK IN DISPATCH HISTORY LEDGER INTERFACE */}
         {outletTab === 'received_stock' && (
           <section className="rounded-2xl bg-slate-900 p-6 border border-slate-800 space-y-4">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-4 gap-4">
@@ -736,18 +787,25 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-slate-950 p-6 font-sans text-slate-100 space-y-6">
       
-      {/* TOAST SYSTEM ATTACHED INTO MANAGEMENT CONSOLE PLATFORMS */}
       {notification && (
         <div className="fixed top-4 right-4 z-50 bg-emerald-600 border border-emerald-400 text-white font-bold py-3 px-5 rounded-xl shadow-2xl text-xs tracking-wide">
           {notification}
         </div>
       )}
 
-      {/* PERMANENT CROSS-BRANCH TOTAL NETWORK METRIC HEADER BAR */}
+      {/* CENTRALIZED PROMOTER DASHBOARD CONTROL HEAD PANEL */}
       <header className="sticky top-0 bg-slate-950/95 backdrop-blur z-40 border-b border-slate-800 pb-4 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-amber-400 tracking-tight">👑 Omkar enterprise Command Dashboard</h1>
-          <p className="text-[10px] text-slate-500 font-mono mt-0.5 uppercase tracking-widest">Global Master Operations, Logistics & Security Panel</p>
+        <div className="flex items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-black text-amber-400 tracking-tight">👑 Omkar enterprise Command Dashboard</h1>
+            <p className="text-[10px] text-slate-500 font-mono mt-0.5 uppercase tracking-widest">Global Master Operations, Logistics & Security Panel</p>
+          </div>
+
+          {/* RESTORED GLOBAL DASHBOARD NETWORK WIDE TOP PERFORMER WIDGET */}
+          <div className="bg-gradient-to-r from-amber-500/10 to-blue-500/5 border border-amber-500/20 px-4 py-2 rounded-xl hidden md:block">
+            <span className="text-[9px] uppercase font-black text-amber-400 block tracking-widest">Network Top Performer</span>
+            <span className="text-xs font-black text-white font-sans">{getTopPerformerLabel('ALL', liveOperatingDate, liveOperatingDate)}</span>
+          </div>
         </div>
         
         <div className="flex flex-wrap gap-3 w-full xl:w-auto">
@@ -767,7 +825,7 @@ export default function Home() {
         </div>
       </header>
 
-      {/* PROMOTER MAIN WORKSPACE SWITCHER SELECTION BAR */}
+      {/* NAVIGATION TABS SELECTOR ROW */}
       <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-0.5">
         <button onClick={() => setPromoterTab('overview')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${promoterTab === 'overview' ? 'bg-slate-900 text-blue-400 border-b-2 border-blue-500' : 'text-slate-500 hover:text-slate-300'}`}>📊 Network Overview</button>
         <button onClick={() => setPromoterTab('branches')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${promoterTab === 'branches' ? 'bg-slate-900 text-purple-400 border-b-2 border-purple-500' : 'text-slate-500 hover:text-slate-300'}`}>🏪 Branch-by-Branch Matrix</button>
@@ -910,7 +968,13 @@ export default function Home() {
                     </div>
                   </div>
 
-                  {/* FIXED COMPREHENSIVE LOOP VIEW SHOWING INDEPENDENT METRIC VOLUMES FOR ALL ITEMS */}
+                  {/* HIGH CONTRAST DYNAMIC TOP PERFORMER COMPONENT INSIDE MATRIX CARDS */}
+                  <div className="bg-slate-950/80 rounded-xl px-3 py-1.5 border border-purple-900/30 text-center">
+                    <span className="text-[10px] font-sans text-purple-400 font-bold block">
+                      ⭐ Window Best Seller: <span className="text-white font-mono font-black">{getTopPerformerLabel(o.id, localRange.start, localRange.end)}</span>
+                    </span>
+                  </div>
+
                   <div className="bg-slate-950 rounded-xl p-3 border border-slate-800 space-y-1 text-[11px] max-h-36 overflow-y-auto">
                     <span className="text-[9px] text-purple-400 uppercase font-bold tracking-wider block mb-1">Itemized Sales Dissection:</span>
                     {getProductSalesPerformanceBreakdown(o.id, localRange.start, localRange.end).map(prod => (
@@ -973,7 +1037,6 @@ export default function Home() {
                 <p className="text-[9px] text-slate-500">Audits structural incoming or outgoing raw quantities matrix logs</p>
               </div>
 
-              {/* RESTORED THE DATE CALENDAR RANGE CONTROLS ROW INSIDE DISPATCH VIEW SPREADSHEETS */}
               <div className="flex flex-wrap items-center gap-2 bg-slate-950 p-2 rounded-xl border border-slate-800 text-[11px]">
                 <select value={promoterActiveTab} onChange={(e) => setPromoterActiveTab(e.target.value as any)} className="bg-slate-900 border border-slate-700 text-blue-400 rounded px-1.5 py-0.5 font-bold outline-none">
                   <option value="consumption">Stock Out (Sales)</option>
@@ -1009,7 +1072,6 @@ export default function Home() {
                 <tbody className="divide-y divide-slate-800/60 text-center">
                   {auditDatesArray.map(dateString => {
                     let dailyRowRunningSum = 0
-                    const loopDayInteger = new Date(dateString).getDate()
 
                     return (
                       <tr key={dateString} className="hover:bg-slate-900/40 transition">
@@ -1021,15 +1083,12 @@ export default function Home() {
                             if (shouldRenderIngredientColumns) {
                               const targetIngName = colHeader
                               computedValue = allSalesHistory.filter(s => {
-                                const recDayStr = s.created_at.split('T')[0]
-                                const matchesOutlet = auditOutletFilter === 'ALL' || s.outlet_id === Number(auditOutletFilter)
-                                return s.item_name === targetIngName && matchesOutlet && recDayStr === dateString
+                                return s.item_name === targetIngName && (auditOutletFilter === 'ALL' || s.outlet_id === Number(auditOutletFilter)) && s.date_string === dateString
                               }).reduce((a, c) => a + Number(c.quantity_sold), 0)
                             } else {
                               const targetOutletId = outlets.find(o => o.name === colHeader)?.id || 0
                               computedValue = allSalesHistory.filter(s => {
-                                const recDayStr = s.created_at.split('T')[0]
-                                return s.item_name === auditIngredient && s.outlet_id === targetOutletId && recDayStr === dateString
+                                return s.item_name === auditIngredient && s.outlet_id === targetOutletId && s.date_string === dateString
                               }).reduce((a, c) => a + Number(c.quantity_sold), 0)
                             }
                           } else {
@@ -1037,8 +1096,7 @@ export default function Home() {
                               const targetIngName = colHeader
                               computedValue = allReplenishments.filter(r => {
                                 const rowDate = r.created_at?.split('T')[0] || liveOperatingDate
-                                const matchesOutlet = auditOutletFilter === 'ALL' || r.outlet_id === Number(auditOutletFilter)
-                                return r.item_name === targetIngName && matchesOutlet && rowDate === dateString
+                                return r.item_name === targetIngName && (auditOutletFilter === 'ALL' || r.outlet_id === Number(auditOutletFilter)) && rowDate === dateString
                               }).reduce((a, c) => a + Number(c.quantity_added), 0)
                             } else {
                               const targetOutletId = outlets.find(o => o.name === colHeader)?.id || 0

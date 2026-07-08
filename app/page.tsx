@@ -71,7 +71,7 @@ export default function Home() {
   const [outletTab, setOutletTab] = useState<'counter' | 'ledger' | 'received_stock'>('counter')
   const [promoterActiveTab, setPromoterActiveTab] = useState<'consumption' | 'dispatches'>('consumption')
 
-  // TIMEZONE SAFE DATE STRING GENERATOR
+  // SECURE LOCAL CLOCK STRING PARSER
   const getTodayDateString = () => {
     const today = new Date()
     const yyyy = today.getFullYear()
@@ -155,6 +155,7 @@ export default function Home() {
     return token
   }
 
+  // ACCURATE LOCAL TIME EXTRACTOR: Resolves timezone difference correctly
   const resolveTargetRowDate = (s: SalesLog) => {
     if (s.date_string && s.date_string.trim().length === 10) {
       return s.date_string
@@ -424,6 +425,7 @@ export default function Home() {
       }
     }
 
+    // TRUE ATOMIC COUNTER: Inserts exactly one unique 'Boxes' logging instance to compute +1 order shifts accurately
     await supabase.from('sales_history').insert({
       outlet_id: selectedOutlet.id,
       item_name: 'Boxes',
@@ -1190,7 +1192,7 @@ export default function Home() {
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
           <div>
             <h3 className="text-sm font-bold text-red-400 uppercase tracking-wider">Multi-Device Anti-Fraud Session Controller</h3>
-            <p className="text-[10px] text-slate-500">Enforces an absolute single-screen policy per outlet terminal. Clear stuck or zombie devices instantly down below.</p>
+            <p className="text-[10px] text-slate-500 Dino">Enforces an absolute single-screen policy per outlet terminal. Clear stuck or zombie devices instantly down below.</p>
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950">

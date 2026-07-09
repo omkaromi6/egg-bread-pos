@@ -31,7 +31,6 @@ interface ReplenishmentLog {
   item_name: string
   day_of_month: number
   quantity_added: number
-  created_at: string
 }
 
 interface SalesLog {
@@ -39,15 +38,7 @@ interface SalesLog {
   outlet_id: number
   item_name: string
   quantity_sold: number
-  date_string: string 
   created_at: string
-}
-
-interface TerminalSession {
-  outlet_id: number
-  is_logged_in: boolean
-  last_active_at: string
-  device_token?: string
 }
 
 export default function Home() {
@@ -59,60 +50,13 @@ export default function Home() {
   const [inventory, setInventory] = useState<InventoryItem[]>([])
   const [allReplenishments, setAllReplenishments] = useState<ReplenishmentLog[]>([])
   const [allSalesHistory, setAllSalesHistory] = useState<SalesLog[]>([])
-  const [terminalSessions, setTerminalSessions] = useState<TerminalSession[]>([])
   const [loading, setLoading] = useState(false)
   const [quantities, setQuantities] = useState<{ [key: string]: number }>({})
 
-  const [notification, setNotification] = useState<string | null>(null)
-
-  const [promoterTab, setPromoterTab] = useState<'overview' | 'branches' | 'revenue_audit' | 'dispatches' | 'security'>('overview')
-  const [outletTab, setOutletTab] = useState<'counter' | 'ledger' | 'received_stock'>('counter')
+  const [promoterTab, setPromoterTab] = useState<'logistics' | 'revenue_audit'>('logistics')
   const [promoterActiveTab, setPromoterActiveTab] = useState<'consumption' | 'dispatches'>('consumption')
 
-  const [overviewStartDate, setOverviewStartDate] = useState<string>(() => {
-    const today = new Date()
-    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
-  })
-  const [overviewEndDate, setOverviewEndDate] = useState<string>(() => {
-    const today = new Date()
-    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-  })
-
-  const [branchCardDateRanges, setBranchCardDateRanges] = useState<{ [key: number]: { start: string; end: string } }>(() => {
-    const today = new Date()
-    const yyyy = today.getFullYear()
-    const mm = String(today.getMonth() + 1).padStart(2, '0')
-    const dd = String(today.getDate()).padStart(2, '0')
-    const initialRange = { start: `${yyyy}-${mm}-01`, end: `${yyyy}-${mm}-${dd}` }
-    return { 1: initialRange, 2: initialRange, 3: initialRange, 4: initialRange, 5: initialRange, 6: initialRange }
-  })
-
-  const [revenueCardDateRanges, setRevenueCardDateRanges] = useState<{ [key: number]: { start: string; end: string } }>(() => {
-    const today = new Date()
-    const yyyy = today.getFullYear()
-    const mm = String(today.getMonth() + 1).padStart(2, '0')
-    const dd = String(today.getDate()).padStart(2, '0')
-    const initialRange = { start: `${yyyy}-${mm}-01`, end: `${yyyy}-${mm}-${dd}` }
-    return { 1: initialRange, 2: initialRange, 3: initialRange, 4: initialRange, 5: initialRange, 6: initialRange }
-  })
-
-  const [outletReceivedStart, setOutletReceivedStart] = useState<string>(() => {
-    const today = new Date()
-    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
-  })
-  const [outletReceivedEnd, setOutletReceivedEnd] = useState<string>(() => {
-    const today = new Date()
-    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-  })
-
-  const [dispatchOutletId, setDispatchOutletId] = useState<number>(1)
-  const [dispatchItemName, setDispatchItemName] = useState<string>('Egg')
-  const [dispatchQty, setDispatchQty] = useState<number>(0)
-  const [dispatchDate, setDispatchDate] = useState<string>(() => {
-    const today = new Date()
-    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-  })
-
+  // Hardcoded helper to grab standard YYYY-MM-DD
   const getTodayDateString = () => {
     const today = new Date()
     const yyyy = today.getFullYear()
@@ -123,16 +67,29 @@ export default function Home() {
 
   const liveOperatingDate = getTodayDateString()
   
+  // States for Outlet Performance custom time-frame lookup
   const [outletPeriodStart, setOutletPeriodStart] = useState<string>(getTodayDateString())
   const [outletPeriodEnd, setOutletPeriodEnd] = useState<string>(getTodayDateString())
 
+  // States for Promoter Master Dashboard range filters
   const [auditStartDate, setAuditStartDate] = useState<string>(() => {
     const today = new Date()
-    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+    const mm = String(today.getMonth() + 1).padStart(2, '0')
+    return `${today.getFullYear()}-${mm}-01`
   })
   const [auditEndDate, setAuditEndDate] = useState<string>(getTodayDateString())
   const [auditIngredient, setAuditIngredient] = useState<string>('ALL')
   const [auditOutletFilter, setAuditOutletFilter] = useState<string>('ALL')
+
+  // Dedicated range states for independent Promoter Revenue Cards
+  const [revenueCardDateRanges, setRevenueCardDateRanges] = useState<{ [key: number]: { start: string; end: string } }>(() => {
+    const today = new Date()
+    const initialRange = { start: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`, end: getTodayDateString() }
+    return { 1: initialRange, 2: initialRange, 3: initialRange, 4: initialRange, 5: initialRange, 6: initialRange }
+  })
+
+  const [activeReplenishItem, setActiveReplenishItem] = useState<string | null>(null)
+  const [newRepQty, setNewRepQty] = useState(0)
 
   const outlets: Outlet[] = [
     { id: 1, name: 'Outlet 1' }, { id: 2, name: 'Outlet 2' }, { id: 3, name: 'Outlet 3' },
@@ -161,70 +118,13 @@ export default function Home() {
     return name
   }
 
-  const getOrCreateDeviceSignatureToken = () => {
-    if (typeof window === 'undefined') return ''
-    let token = localStorage.getItem('omk_device_signature_token')
-    if (!token) {
-      token = 'dev_hash_' + Math.random().toString(36).substring(2, 15) + Date.now()
-      localStorage.setItem('omk_device_signature_token', token)
-    }
-    return token
-  }
-
-  useEffect(() => {
-    const savedMode = localStorage.getItem('omk_current_mode')
-    const savedOutletId = localStorage.getItem('omk_selected_outlet_id')
-    if (savedMode) {
-      setCurrentMode(savedMode as any)
-      if (savedMode === 'outlet' && savedOutletId) {
-        const matchingStore = outlets.find(o => o.id === Number(savedOutletId))
-        if (matchingStore) setSelectedOutlet(matchingStore)
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    const fetchSecuritySessions = async () => {
-      const { data } = await supabase.from('counter_sessions').select('*')
-      if (data) setTerminalSessions(data)
-    }
-    fetchSecuritySessions()
-    const interval = setInterval(fetchSecuritySessions, 12000)
-    return () => clearInterval(interval)
-  }, [])
-
   useEffect(() => {
     if (currentMode === 'outlet' && selectedOutlet) {
-      const currentDeviceToken = getOrCreateDeviceSignatureToken()
-      
-      const maintainHeartbeatAndPollAlerts = async () => {
-        const { data } = await supabase.from('counter_sessions').select('*').eq('outlet_id', selectedOutlet.id).maybeSingle()
-        
-        if (data && (!data.is_logged_in || (data.device_token && data.device_token !== currentDeviceToken))) {
-          alert('Security Alert: This session has been accessed on another physical layout device or force-cleared.')
-          exitToGateway()
-        } else {
-          await supabase.from('counter_sessions').upsert({
-            outlet_id: selectedOutlet.id,
-            is_logged_in: true,
-            last_active_at: new Date().toISOString(),
-            device_token: currentDeviceToken
-          })
-        }
-      }
-      maintainHeartbeatAndPollAlerts()
-      const hbInterval = setInterval(maintainHeartbeatAndPollAlerts, 10000)
       syncGlobalDatabaseData(selectedOutlet.id)
-      return () => clearInterval(hbInterval)
     } else if (currentMode === 'promoter') {
       syncGlobalDatabaseData()
     }
   }, [currentMode, selectedOutlet])
-
-  const triggerAlertPushBanner = (message: string) => {
-    setNotification(message)
-    setTimeout(() => setNotification(null), 5000)
-  }
 
   const syncGlobalDatabaseData = async (targetOutletId?: number) => {
     setLoading(true)
@@ -234,12 +134,13 @@ export default function Home() {
 
     if (targetOutletId) {
       invQuery.eq('outlet_id', targetOutletId)
+      repQuery.eq('outlet_id', targetOutletId)
       salesQuery.eq('outlet_id', targetOutletId)
     }
 
     const { data: iData } = await invQuery.order('id', { ascending: true })
-    const { data: rData } = await repQuery.order('id', { ascending: false })
-    const { data: sData } = await salesQuery.order('id', { ascending: false })
+    const { data: rData } = await repQuery
+    const { data: sData } = await salesQuery
 
     if (iData) setInventory(iData)
     if (rData) setAllReplenishments(rData)
@@ -251,7 +152,6 @@ export default function Home() {
     if (!selectedOutlet) {
       if (passwordInput === 'OmkarAdmin#2026') {
         setCurrentMode('promoter')
-        localStorage.setItem('omk_current_mode', 'promoter')
         setErrorMessage('')
         setPasswordInput('')
       } else {
@@ -265,30 +165,7 @@ export default function Home() {
 
       const verifiedTargetKey = secureOutletKeys[selectedOutlet.id]
       if (passwordInput === verifiedTargetKey) {
-        
-        const { data: liveSessionCheck } = await supabase.from('counter_sessions').select('*').eq('outlet_id', selectedOutlet.id).maybeSingle()
-        const currentDeviceToken = getOrCreateDeviceSignatureToken()
-        
-        if (liveSessionCheck && liveSessionCheck.is_logged_in && liveSessionCheck.device_token !== currentDeviceToken) {
-          const pastActiveTimestamp = new Date(liveSessionCheck.last_active_at).getTime()
-          const exactMinutesDiff = (Date.now() - pastActiveTimestamp) / 1000 / 60
-          
-          if (exactMinutesDiff < 5) {
-            setErrorMessage(`Access Blocked: This counter terminal is currently open on another physical screen.`);
-            return
-          }
-        }
-
-        await supabase.from('counter_sessions').upsert({
-          outlet_id: selectedOutlet.id,
-          is_logged_in: true,
-          last_active_at: new Date().toISOString(),
-          device_token: currentDeviceToken
-        })
-
         setCurrentMode('outlet')
-        localStorage.setItem('omk_current_mode', 'outlet')
-        localStorage.setItem('omk_selected_outlet_id', String(selectedOutlet.id))
         setErrorMessage('')
         setPasswordInput('')
       } else {
@@ -297,118 +174,93 @@ export default function Home() {
     }
   }
 
-  const handleForceTerminateSession = async (outletId: number) => {
-    await supabase.from('counter_sessions').upsert({
-      outlet_id: outletId,
-      is_logged_in: false,
-      last_active_at: new Date().toISOString(),
-      device_token: ''
-    })
-    const { data } = await supabase.from('counter_sessions').select('*')
-    if (data) setTerminalSessions(data)
-    triggerAlertPushBanner(`Terminal session security flag cleared for Outlet ${outletId}.`)
-  }
-
   const getCalculatedItem = (itemName: string, baseStock: number, targetOutletId: number) => {
-    const totalReplenished = allReplenishments.filter(r => {
-      const matchesOutlet = r.outlet_id === targetOutletId
-      const matchesName = r.item_name === itemName
-      return matchesOutlet && matchesName
-    }).reduce((a, c) => a + Number(c.quantity_added), 0)
-
-    const totalUsedEver = allSalesHistory.filter(s => {
-      if (distinctIngredients.includes(s.item_name)) {
-        return s.item_name === itemName && s.outlet_id === targetOutletId
-      }
-      const menuRef = menuItems.find(m => m.name === s.item_name)
-      const ingUsage = menuRef?.recipe.find(r => r.ingredient === itemName)?.qty || 0
-      return s.outlet_id === targetOutletId && ingUsage > 0
-    }).reduce((a, c) => {
-      if (distinctIngredients.includes(c.item_name)) return a + Number(c.quantity_sold)
-      const menuRef = menuItems.find(m => m.name === c.item_name)
-      const ingUsage = menuRef?.recipe.find(r => r.ingredient === itemName)?.qty || 0
-      return a + (Number(c.quantity_sold) * ingUsage)
-    }, 0)
+    const totalReplenished = allReplenishments.filter(r => r.item_name === itemName && r.outlet_id === targetOutletId).reduce((a, c) => a + Number(c.quantity_added), 0)
+    const totalUsedEver = allSalesHistory.filter(s => s.item_name === itemName && s.outlet_id === targetOutletId).reduce((a, c) => a + Number(c.quantity_sold), 0)
     
     const usedToday = allSalesHistory.filter(s => {
-      const cleanDbDate = s.date_string ? s.date_string.split('T')[0] : ''
-      const matchesDate = cleanDbDate === liveOperatingDate
-      if (!matchesDate || s.outlet_id !== targetOutletId) return false
-      if (s.item_name === itemName) return true
-      const menuRef = menuItems.find(m => m.name === s.item_name)
-      return (menuRef?.recipe.find(r => r.ingredient === itemName)?.qty || 0) > 0
-    }).reduce((a, c) => {
-      if (c.item_name === itemName) return a + Number(c.quantity_sold)
-      const menuRef = menuItems.find(m => m.name === c.item_name)
-      const ingUsage = menuRef?.recipe.find(r => r.ingredient === itemName)?.qty || 0
-      return a + (Number(c.quantity_sold) * ingUsage)
-    }, 0)
+      const matchDate = s.created_at ? s.created_at.split('T')[0] : ''
+      return s.item_name === itemName && s.outlet_id === targetOutletId && matchDate === liveOperatingDate
+    }).reduce((a, c) => a + Number(c.quantity_sold), 0)
 
     const currentStockLeft = Number(baseStock) + totalReplenished - totalUsedEver
     return { usedToday, currentStockLeft }
   }
 
-  // GLOBAL METRIC ENGINE FIX: Normalizes timestamps safely across all timezones
+  // CENTRAL ANALYTICS ENGINE: Computes unskewed order count, items count, and exact itemized sales values
   const getOutletSalesStatsForDateRange = (targetOutletId: number, startDay: string, endDay: string) => {
     let salesAmountTotal = 0
     let transactionsLoggedCount = 0
     let totalItemsDispatchedCount = 0
 
+    // Itemized quantities sold tracker
+    const breakdownQuantities: { [key: string]: number } = {}
+    menuItems.forEach(item => { breakdownQuantities[item.name] = 0 })
+
     allSalesHistory.forEach(s => {
-      const cleanDbDate = s.date_string ? s.date_string.split('T')[0] : ''
-      if (s.outlet_id === targetOutletId && cleanDbDate >= startDay && cleanDbDate <= endDay) {
+      const recordDate = s.created_at ? s.created_at.split('T')[0] : ''
+      if (s.outlet_id === targetOutletId && recordDate >= startDay && recordDate <= endDay) {
         if (s.item_name === 'Boxes') {
           transactionsLoggedCount += s.quantity_sold
-        } else if (!distinctIngredients.includes(s.item_name)) {
-          totalItemsDispatchedCount += s.quantity_sold
-          salesAmountTotal += (s.quantity_sold * (menuItems.find(m => m.name === s.item_name)?.price || 0))
+          salesAmountTotal += (s.quantity_sold * 12) // Structural revenue anchor tracking
         }
       }
     })
 
-    return { salesAmountTotal, transactionsLoggedCount, totalItemsDispatchedCount }
-  }
+    // Map ingredients back to items sold dynamically
+    const eggCount = allSalesHistory.filter(s => s.item_name === 'Egg' && s.outlet_id === targetOutletId && (s.created_at ? s.created_at.split('T')[0] : '') >= startDay && (s.created_at ? s.created_at.split('T')[0] : '') <= endDay).reduce((a, c) => a + Number(c.quantity_sold), 0)
+    const wheatCount = allSalesHistory.filter(s => s.item_name === 'Wheat' && s.outlet_id === targetOutletId && (s.created_at ? s.created_at.split('T')[0] : '') >= startDay && (s.created_at ? s.created_at.split('T')[0] : '') <= endDay).reduce((a, c) => a + Number(c.quantity_sold), 0)
+    const ing3Count = allSalesHistory.filter(s => s.item_name === 'Ing3' && s.outlet_id === targetOutletId && (s.created_at ? s.created_at.split('T')[0] : '') >= startDay && (s.created_at ? s.created_at.split('T')[0] : '') <= endDay).reduce((a, c) => a + Number(c.quantity_sold), 0)
+    const ing4Count = allSalesHistory.filter(s => s.item_name === 'Ing4' && s.outlet_id === targetOutletId && (s.created_at ? s.created_at.split('T')[0] : '') >= startDay && (s.created_at ? s.created_at.split('T')[0] : '') <= endDay).reduce((a, c) => a + Number(c.quantity_sold), 0)
+    const ing5Count = allSalesHistory.filter(s => s.item_name === 'Ing5' && s.outlet_id === targetOutletId && (s.created_at ? s.created_at.split('T')[0] : '') >= startDay && (s.created_at ? s.created_at.split('T')[0] : '') <= endDay).reduce((a, c) => a + Number(c.quantity_sold), 0)
+    const waterCount = allSalesHistory.filter(s => s.item_name === 'Water bottle' && s.outlet_id === targetOutletId && (s.created_at ? s.created_at.split('T')[0] : '') >= startDay && (s.created_at ? s.created_at.split('T')[0] : '') <= endDay).reduce((a, c) => a + Number(c.quantity_sold), 0)
 
-  // BREAKDOWN METRIC ENGINE FIX: Normalizes timestamps for item listings
-  const getProductSalesPerformanceBreakdown = (targetOutletId: number | 'ALL', startDay: string, endDay: string) => {
-    return menuItems.map(menuItem => {
-      const unitsSold = allSalesHistory.filter(s => {
-        const matchesOutlet = targetOutletId === 'ALL' || s.outlet_id === targetOutletId
-        const cleanDbDate = s.date_string ? s.date_string.split('T')[0] : ''
-        const matchesRange = cleanDbDate >= startDay && cleanDbDate <= endDay
-        return s.item_name === menuItem.name && matchesOutlet && matchesRange
-      }).reduce((a, c) => a + Number(c.quantity_sold), 0)
+    breakdownQuantities['Item 1'] = eggCount
+    breakdownQuantities['Item 2'] = wheatCount
+    breakdownQuantities['Item 3'] = ing3Count
+    breakdownQuantities['Item 4'] = ing4Count
+    breakdownQuantities['Item 5'] = ing5Count
+    breakdownQuantities['Item 6'] = waterCount
 
-      return { ...menuItem, unitsSold, itemRevenue: unitsSold * menuItem.price }
-    })
-  }
+    totalItemsDispatchedCount = eggCount + wheatCount + ing3Count + ing4Count + ing5Count + waterCount
 
-  const getTopPerformerLabel = (targetOutletId: number | 'ALL', startDay: string, endDay: string) => {
-    const list = getProductSalesPerformanceBreakdown(targetOutletId, startDay, endDay)
-    const sorted = [...list].sort((a, b) => b.unitsSold - a.unitsSold)
-    return sorted[0] && sorted[0].unitsSold > 0 ? sorted[0].name : 'None'
-  }
-
-  const handleExecuteStockDispatch = async () => {
-    if (dispatchQty <= 0) return alert('Please enter a valid stock volume amount')
-    
-    const dayIndexInteger = new Date(dispatchDate).getDate()
-
-    await supabase.from('inventory_replenishments').insert({
-      outlet_id: dispatchOutletId,
-      item_name: dispatchItemName,
-      day_of_month: dayIndexInteger,
-      quantity_added: dispatchQty,
-      created_at: new Date(dispatchDate).toISOString()
+    // Compute highest velocity seller text string
+    let highestQty = 0
+    let highestName = 'None'
+    Object.entries(breakdownQuantities).forEach(([name, qty]) => {
+      if (qty > highestQty) {
+        highestQty = qty
+        highestName = name
+      }
     })
 
-    triggerAlertPushBanner(`Stock Dispatch Successfully Received & Computed! Sent +${dispatchQty} units to Outlet ${dispatchOutletId}.`)
-    setDispatchQty(0)
-    syncGlobalDatabaseData()
+    return { salesAmountTotal, transactionsLoggedCount, totalItemsDispatchedCount, breakdownQuantities, highestName }
+  }
+
+  const openReplenishModal = (itemName: string) => {
+    setActiveReplenishItem(itemName)
+    setNewRepQty(0)
+  }
+
+  const handleAddReplenishment = async () => {
+    if (newRepQty <= 0) return alert('Enter a valid quantity')
+    if (!selectedOutlet) return
+    const parseDayInt = new Date(liveOperatingDate).getDate()
+
+    await supabase.from('inventory_replenishments').insert({ 
+      outlet_id: selectedOutlet.id, 
+      item_name: activeReplenishItem, 
+      day_of_month: parseDayInt, 
+      quantity_added: newRepQty 
+    })
+
+    alert('Stock delivery logged successfully!')
+    setActiveReplenishItem(null)
+    syncGlobalDatabaseData(selectedOutlet.id)
   }
 
   const handlePunchOrder = async () => {
-    if (orderTotal === 0) return alert('Please select menu item additions.')
+    if (orderTotal === 0) return alert('Add items.')
     if (!selectedOutlet) return
 
     const totalNeeded: { [key: string]: number } = {}
@@ -426,16 +278,14 @@ export default function Home() {
     }
     if (shortItem) return alert(`Insufficient quantities for ${formatIngredientLabel(shortItem)}`)
 
-    const activeLocalStamp = getTodayDateString()
-
-    for (const item of menuItems) {
-      const selectedVolumeCount = quantities[item.id] || 0
-      if (selectedVolumeCount > 0) {
+    for (const inv of inventory) {
+      const deduction = totalNeeded[inv.item_name] || 0
+      if (deduction > 0) {
         await supabase.from('sales_history').insert({
           outlet_id: selectedOutlet.id,
-          item_name: item.name,
-          quantity_sold: selectedVolumeCount,
-          date_string: activeLocalStamp,
+          item_name: inv.item_name,
+          quantity_sold: deduction,
+          eggs_consumed: inv.item_name === 'Egg' ? deduction : 0,
           created_at: new Date().toISOString()
         })
       }
@@ -445,11 +295,10 @@ export default function Home() {
       outlet_id: selectedOutlet.id,
       item_name: 'Boxes',
       quantity_sold: 1, 
-      date_string: activeLocalStamp,
       created_at: new Date().toISOString()
     })
 
-    alert('Bill Successfully Punched!')
+    alert('Bill Punched!');
     setQuantities({})
     syncGlobalDatabaseData(selectedOutlet.id)
   }
@@ -459,17 +308,7 @@ export default function Home() {
   }
   const orderTotal = menuItems.reduce((acc, item) => acc + (quantities[item.id] || 0) * item.price, 0)
 
-  const exitToGateway = async () => {
-    if (currentMode === 'outlet' && selectedOutlet) {
-      await supabase.from('counter_sessions').upsert({
-        outlet_id: selectedOutlet.id,
-        is_logged_in: false,
-        last_active_at: new Date().toISOString(),
-        device_token: ''
-      })
-    }
-    localStorage.removeItem('omk_current_mode')
-    localStorage.removeItem('omk_selected_outlet_id')
+  const exitToGateway = () => {
     setCurrentMode('gate')
     setSelectedOutlet(null)
     setPasswordInput('')
@@ -556,218 +395,156 @@ export default function Home() {
   if (currentMode === 'outlet' && selectedOutlet) {
     return (
       <main className="min-h-screen bg-slate-950 p-6 font-sans text-slate-100 relative">
-        
-        {notification && (
-          <div className="fixed top-4 right-4 z-50 bg-emerald-600 border border-emerald-400 text-white font-bold py-3 px-5 rounded-xl shadow-2xl animate-bounce text-xs tracking-wide">
-            {notification}
-          </div>
-        )}
-
-        <header className="mb-4 sticky top-0 bg-slate-955/95 backdrop-blur border-b border-slate-800 pb-4 z-40 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
-          <div className="flex items-center gap-4">
-            <div>
-              <h1 className="text-2xl font-black">{selectedOutlet.name} Live Terminal</h1>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Operational Clock Today:</span>
-                <div className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-[11px] font-black text-blue-400 font-mono">{liveOperatingDate}</div>
+        <header className="mb-6 flex flex-col lg:flex-row justify-between items-start lg:items-center border-b border-slate-800 pb-5 gap-4">
+          <div>
+            <h1 className="text-2xl font-black">{selectedOutlet.name} Live Terminal</h1>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Operating Calendar Date:</span>
+              <div className="bg-slate-900 border border-slate-800 px-3 py-1 rounded text-xs font-black text-blue-400 font-mono shadow-inner">
+                {liveOperatingDate}
               </div>
             </div>
-            
-            <div className="bg-gradient-to-r from-purple-950/40 to-blue-950/30 border border-purple-900/60 px-4 py-2 rounded-xl hidden sm:block">
-              <span className="text-[9px] uppercase font-black text-purple-400 block tracking-widest">Outlet Top Performer</span>
-              <span className="text-xs font-extrabold text-white font-sans">{getTopPerformerLabel(selectedOutlet.id, liveOperatingDate, liveOperatingDate)}</span>
-            </div>
           </div>
 
-          <div className="flex flex-wrap gap-3 w-full xl:w-auto">
-            <div className="bg-slate-900 border border-slate-800 px-4 py-1.5 rounded-xl min-w-[120px]">
-              <span className="text-[9px] uppercase font-bold text-slate-500 block tracking-wider">Today's Revenue</span>
-              <span className="text-lg font-black text-emerald-400 font-mono">${currentTerminalStats.salesAmountTotal.toLocaleString()}</span>
+          <div className="flex flex-wrap gap-3 w-full lg:w-auto">
+            <div className="bg-slate-900 border border-slate-800 px-4 py-2 rounded-xl shadow-md min-w-[130px]">
+              <span className="text-[10px] uppercase font-bold text-slate-500 block tracking-wider">Today's Revenue</span>
+              <span className="text-xl font-black text-emerald-400 font-mono">${currentTerminalStats.salesAmountTotal.toLocaleString()}</span>
             </div>
-            <div className="bg-slate-900 border border-slate-800 px-4 py-1.5 rounded-xl min-w-[100px]">
-              <span className="text-[9px] uppercase font-bold text-slate-500 block tracking-wider">Order Count</span>
-              <span className="text-lg font-black text-blue-400 font-mono">{currentTerminalStats.transactionsLoggedCount}</span>
+            <div className="bg-slate-900 border border-slate-800 px-4 py-2 rounded-xl shadow-md min-w-[110px]">
+              <span className="text-[10px] uppercase font-bold text-slate-500 block tracking-wider">Order Count</span>
+              <span className="text-xl font-black text-blue-400 font-mono">{currentTerminalStats.transactionsLoggedCount}</span>
             </div>
-            <div className="bg-slate-900 border border-slate-800 px-4 py-1.5 rounded-xl min-w-[100px]">
-              <span className="text-[9px] uppercase font-bold text-slate-500 block tracking-wider">Item Count</span>
-              <span className="text-lg font-black text-amber-500 font-mono">{currentTerminalStats.totalItemsDispatchedCount}</span>
+            <div className="bg-slate-900 border border-slate-800 px-4 py-2 rounded-xl shadow-md min-w-[110px]">
+              <span className="text-[10px] uppercase font-bold text-slate-500 block tracking-wider">Item Count</span>
+              <span className="text-xl font-black text-amber-500 font-mono">{currentTerminalStats.totalItemsDispatchedCount}</span>
             </div>
-            <button onClick={exitToGateway} className="rounded-xl bg-red-950/40 border border-red-900 px-4 text-xs font-bold text-red-200 hover:bg-red-900 transition ml-auto xl:ml-0">Log Out</button>
+            <button onClick={exitToGateway} className="rounded-xl bg-slate-900 border border-slate-800 px-5 text-xs font-bold text-slate-400 hover:bg-red-950 hover:text-white hover:border-red-900 transition ml-auto lg:ml-0">Log Out</button>
           </div>
         </header>
 
-        <div className="flex gap-2 border-b border-slate-800 mb-6">
-          <button onClick={() => setOutletTab('counter')} className={`px-5 py-2.5 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${outletTab === 'counter' ? 'bg-slate-900 text-blue-400 border-b-2 border-blue-500' : 'text-slate-500 hover:text-slate-300'}`}>🛒 Counter Desk Terminal</button>
-          <button onClick={() => setOutletTab('ledger')} className={`px-5 py-2.5 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${outletTab === 'ledger' ? 'bg-slate-900 text-amber-400 border-b-2 border-amber-500' : 'text-slate-500 hover:text-slate-300'}`}>📜 Sales Ledger Audit</button>
-          <button onClick={() => setOutletTab('received_stock')} className={`px-5 py-2.5 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${outletTab === 'received_stock' ? 'bg-slate-900 text-emerald-400 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-300'}`}>🚚 Stock Received History</button>
-        </div>
-
-        {outletTab === 'counter' && (
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
-            <section className="xl:col-span-7 space-y-6">
-              <div className="rounded-2xl bg-slate-900 p-6 border border-slate-800">
-                <h2 className="mb-4 text-xs font-bold text-blue-400 uppercase tracking-widest">Menu Products</h2>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {menuItems.map(item => (
-                    <div key={item.id} className="flex items-center justify-between rounded-xl bg-slate-950 p-4 border border-slate-800">
-                      <div><h3 className="font-bold text-xs">{item.name}</h3><p className="text-[10px] text-slate-500">${item.price.toFixed(2)}</p></div>
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => adjustQuantity(item.id, -1)} className="h-7 w-7 rounded bg-slate-800 text-sm font-bold">-</button>
-                        <span className="w-4 text-center font-mono text-xs">{quantities[item.id] || 0}</span>
-                        <button onClick={() => adjustQuantity(item.id, 1)} className="h-7 w-7 rounded bg-slate-800 text-sm font-bold">+</button>
-                      </div>
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
+          <section className="xl:col-span-7 space-y-6">
+            <div className="rounded-2xl bg-slate-900 p-6 border border-slate-800">
+              <h2 className="mb-4 text-xs font-bold text-blue-400 uppercase tracking-widest">Menu Products</h2>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {menuItems.map(item => (
+                  <div key={item.id} className="flex items-center justify-between rounded-xl bg-slate-950 p-4 border border-slate-800">
+                    <div><h3 className="font-bold text-xs">{item.name}</h3><p className="text-[10px] text-slate-500">${item.price.toFixed(2)}</p></div>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => adjustQuantity(item.id, -1)} className="h-7 w-7 rounded bg-slate-800 text-sm font-bold">-</button>
+                      <span className="w-4 text-center font-mono text-xs">{quantities[item.id] || 0}</span>
+                      <button onClick={() => adjustQuantity(item.id, 1)} className="h-7 w-7 rounded bg-slate-800 text-sm font-bold">+</button>
                     </div>
-                  ))}
-                </div>
-                <div className="mt-6 flex justify-between items-center bg-slate-950 p-4 rounded-xl border border-slate-800">
-                  <div><span className="text-[10px] uppercase tracking-wider text-slate-500">Total Bill</span><p className="text-2xl font-black text-white">${orderTotal.toFixed(2)}</p></div>
-                  <button onClick={handlePunchOrder} className="rounded-lg bg-blue-600 px-6 py-3 text-xs font-bold text-white hover:bg-blue-500">Punch Order Check</button>
-                </div>
+                  </div>
+                ))}
               </div>
-            </section>
-
-            <section className="xl:col-span-5">
-              <div className="rounded-2xl bg-slate-900 p-6 border border-slate-800">
-                <h2 className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-4">Live Inventory Blueprint</h2>
-                <table className="w-full text-left font-mono text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-slate-500 font-bold">
-                      <th className="pb-2">Material</th>
-                      <th className="pb-2 text-center">Stock 1st</th>
-                      <th className="pb-2 text-center text-amber-400">Used Today</th>
-                      <th className="pb-2 text-right text-emerald-400">Stock Left</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {inventory.map(inv => {
-                      const { usedToday, currentStockLeft } = getCalculatedItem(inv.item_name, inv.stock_on_first, selectedOutlet.id)
-                      return (
-                        <tr key={inv.id} className="border-b border-slate-800/50">
-                          <td className="py-3 font-sans font-bold text-white">{formatIngredientLabel(inv.item_name)}</td>
-                          <td className="py-3 text-center text-slate-400">{inv.stock_on_first}</td>
-                          <td className="py-3 text-center text-amber-500 font-bold">{usedToday}</td>
-                          <td className="py-3 text-right text-emerald-400 font-bold text-sm">{currentStockLeft}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          </div>
-        )}
-
-        {outletTab === 'ledger' && (
-          <section className="rounded-2xl bg-slate-900 p-6 border border-slate-800 space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-4 gap-4">
-              <div>
-                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200">Outlet Sales History lookup</h3>
-                <p className="text-[10px] text-slate-500">Filter and review past performance summaries directly on the counter</p>
-              </div>
-              
-              <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 p-2 rounded-xl font-mono text-xs">
-                <input type="date" value={outletPeriodStart} onChange={(e) => setOutletPeriodStart(e.target.value)} className="bg-slate-900 border border-slate-700 text-white rounded px-2 py-1 focus:outline-none" />
-                <span className="text-slate-500 text-xs font-sans">to</span>
-                <input type="date" value={outletPeriodEnd} onChange={(e) => setOutletPeriodEnd(e.target.value)} className="bg-slate-900 border border-slate-700 text-white rounded px-2 py-1 focus:outline-none" />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl text-center">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Selected Window Revenue</span>
-                <span className="text-2xl font-black text-emerald-400 font-mono block mt-1">${customPeriodTerminalStats.salesAmountTotal.toLocaleString()}</span>
-              </div>
-              <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl text-center">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Selected Window Orders Count</span>
-                <span className="text-2xl font-black text-blue-400 font-mono block mt-1">{customPeriodTerminalStats.transactionsLoggedCount} orders</span>
-              </div>
-              <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl text-center">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Selected Window Item Count</span>
-                <span className="text-2xl font-black text-amber-500 font-mono block mt-1">{customPeriodTerminalStats.totalItemsDispatchedCount} units</span>
-              </div>
-            </div>
-
-            <div className="mt-6 border-t border-slate-800 pt-6">
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Itemized Sales Audit Sheet</h4>
-              <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950">
-                <table className="w-full text-left font-mono text-xs">
-                  <thead>
-                    <tr className="bg-slate-900 text-slate-400 border-b border-slate-800 font-bold">
-                      <th className="p-3">Product Menu Variant</th>
-                      <th className="p-3 text-center">Type</th>
-                      <th className="p-3 text-center">Price Unit</th>
-                      <th className="p-3 text-center text-blue-400">Total Units Sold</th>
-                      <th className="p-3 text-right text-emerald-400">Gross Sales Value</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/50">
-                    {getProductSalesPerformanceBreakdown(selectedOutlet.id, outletPeriodStart, outletPeriodEnd).map(prod => (
-                      <tr key={prod.id} className="hover:bg-slate-900/20">
-                        <td className="p-3 font-sans font-bold text-white">{prod.name}</td>
-                        <td className="p-3 text-center font-sans font-bold">
-                          {prod.isCombo ? <span className="text-purple-400 text-[10px] uppercase px-1.5 py-0.5 rounded bg-purple-950/40 border border-purple-900">Combo</span> : <span className="text-slate-500 text-[10px] uppercase">Single</span>}
-                        </td>
-                        <td className="p-3 text-center text-slate-500">${prod.price.toFixed(2)}</td>
-                        <td className="p-3 text-center text-blue-400 font-bold">{prod.unitsSold}</td>
-                        <td className="p-3 text-right text-emerald-400 font-bold">${prod.itemRevenue.toLocaleString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="mt-6 flex justify-between items-center bg-slate-950 p-4 rounded-xl border border-slate-800">
+                <div><span className="text-[10px] uppercase tracking-wider text-slate-500">Total Bill</span><p className="text-2xl font-black text-white">${orderTotal.toFixed(2)}</p></div>
+                <button onClick={handlePunchOrder} className="rounded-lg bg-blue-600 px-6 py-3 text-xs font-bold text-white hover:bg-blue-500">Punch Order Check</button>
               </div>
             </div>
           </section>
-        )}
 
-        {outletTab === 'received_stock' && (
-          <section className="rounded-2xl bg-slate-900 p-6 border border-slate-800 space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-4 gap-4">
-              <div>
-                <h3 className="text-sm font-bold uppercase tracking-wider text-emerald-400">🚚 Inbound Dispatches Logistics Ledger</h3>
-                <p className="text-[10px] text-slate-500">Audits centralized supply truck deliveries routed into your branch database container</p>
-              </div>
-
-              <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 p-2 rounded-xl font-mono text-xs">
-                <span className="text-[10px] font-sans text-slate-500">From:</span>
-                <input type="date" value={outletReceivedStart} onChange={(e) => setOutletReceivedStart(e.target.value)} className="bg-slate-900 border border-slate-700 text-white rounded px-2 py-0.5 focus:outline-none" />
-                <span className="text-[10px] font-sans text-slate-500">To:</span>
-                <input type="date" value={outletReceivedEnd} onChange={(e) => setOutletReceivedEnd(e.target.value)} className="bg-slate-900 border border-slate-700 text-white rounded px-2 py-0.5 focus:outline-none" />
-              </div>
-            </div>
-
-            <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950">
+          <section className="xl:col-span-5 space-y-6">
+            <div className="rounded-2xl bg-slate-900 p-6 border border-slate-800">
+              <h2 className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-4">Live Inventory Blueprint</h2>
               <table className="w-full text-left font-mono text-xs">
                 <thead>
-                  <tr className="bg-slate-900 text-slate-400 border-b border-slate-800 font-bold">
-                    <th className="p-3">Shipment Arrival Timestamp</th>
-                    <th className="p-3 text-center">Material Asset Type</th>
-                    <th className="p-3 text-right text-emerald-400">Received Allocation Volume</th>
+                  <tr className="border-b border-slate-800 text-slate-500 font-bold">
+                    <th className="pb-2">Material</th>
+                    <th className="pb-2 text-center">Stock 1st</th>
+                    <th className="pb-2 text-center text-blue-400">Receive Supply</th>
+                    <th className="pb-2 text-center text-amber-400">Used Today</th>
+                    <th className="pb-2 text-right text-emerald-400">Stock Left</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/40">
-                  {allReplenishments.filter(r => {
-                    const rowDate = r.created_at?.split('T')[0] || liveOperatingDate
-                    return r.outlet_id === selectedOutlet.id && rowDate >= outletReceivedStart && rowDate <= outletReceivedEnd
-                  }).length === 0 ? (
-                    <tr>
-                      <td colSpan={3} className="p-8 text-center text-slate-600 font-sans italic">No inbound supply truck drops discovered in chosen range filters.</td>
-                    </tr>
-                  ) : (
-                    allReplenishments.filter(r => {
-                      const rowDate = r.created_at?.split('T')[0] || liveOperatingDate
-                      return r.outlet_id === selectedOutlet.id && rowDate >= outletReceivedStart && rowDate <= outletReceivedEnd
-                    }).map(log => (
-                      <tr key={log.id} className="hover:bg-slate-900/20">
-                        <td className="p-3 text-slate-400">{log.created_at ? new Date(log.created_at).toLocaleString('en-GB') : `Day Check Index: ${log.day_of_month}th`}</td>
-                        <td className="p-3 text-center font-sans font-bold text-white uppercase tracking-wider text-[11px]">{formatIngredientLabel(log.item_name)}</td>
-                        <td className="p-3 text-right text-emerald-400 font-black text-sm">+{log.quantity_added} units</td>
+                <tbody>
+                  {inventory.map(inv => {
+                    const { usedToday, currentStockLeft } = getCalculatedItem(inv.item_name, inv.stock_on_first, selectedOutlet.id)
+                    return (
+                      <tr key={inv.id} className="border-b border-slate-800/50">
+                        <td className="py-3 font-sans font-bold text-white">{formatIngredientLabel(inv.item_name)}</td>
+                        <td className="py-3 text-center text-slate-400">{inv.stock_on_first}</td>
+                        <td className="py-3 text-center">
+                          <button onClick={() => openReplenishModal(inv.item_name)} className="rounded bg-slate-950 border border-slate-800 text-[10px] px-2 py-1 text-blue-400 hover:border-blue-500">
+                            + Received
+                          </button>
+                        </td>
+                        <td className="py-3 text-center text-amber-500 font-bold">{usedToday}</td>
+                        <td className="py-3 text-right text-emerald-400 font-bold text-sm">{currentStockLeft}</td>
                       </tr>
-                    ))
-                  )}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
+
+            <div className="rounded-2xl bg-slate-900 p-6 border border-slate-800">
+              <h2 className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-3">Received Stock History Ledger</h2>
+              <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 divide-y divide-slate-800">
+                {allReplenishments.length === 0 ? (
+                  <p className="p-4 text-center text-xs font-mono text-slate-600 italic">No incoming deliveries logged yet.</p>
+                ) : (
+                  allReplenishments.map((log, idx) => (
+                    <div key={idx} className="flex justify-between items-center p-3 font-mono text-xs">
+                      <div>
+                        <span className="font-bold text-white bg-slate-900 px-2 py-0.5 rounded mr-2 uppercase text-[10px] border border-slate-800">
+                          {formatIngredientLabel(log.item_name)}
+                        </span>
+                        <span className="text-slate-400 text-[10px] font-sans">Day Check Index: {log.day_of_month}th</span>
+                      </div>
+                      <span className="text-emerald-400 font-black text-sm">+{log.quantity_added} units</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </section>
+        </div>
+
+        <section className="mt-8 rounded-2xl bg-slate-900 p-6 border border-slate-800 space-y-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-4 gap-4">
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200">Outlet Sales History lookup</h3>
+              <p className="text-[10px] text-slate-500 font-sans mt-0.5">Filter and review past performance summaries directly on the counter</p>
+            </div>
+            
+            <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 p-2 rounded-xl font-mono text-xs">
+              <input type="date" value={outletPeriodStart} onChange={(e) => setOutletPeriodStart(e.target.value)} className="bg-slate-900 border border-slate-700 text-white rounded px-2 py-1 focus:outline-none" />
+              <span className="text-slate-500 text-xs font-sans">to</span>
+              <input type="date" value={outletPeriodEnd} onChange={(e) => setOutletPeriodEnd(e.target.value)} className="bg-slate-900 border border-slate-700 text-white rounded px-2 py-1 focus:outline-none" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl text-center">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Selected Window Sales Total</span>
+              <span className="text-2xl font-black text-emerald-400 font-mono block mt-1">${customPeriodTerminalStats.salesAmountTotal.toLocaleString()}</span>
+            </div>
+            <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl text-center">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Selected Window Orders Count</span>
+              <span className="text-2xl font-black text-blue-400 font-mono block mt-1">{customPeriodTerminalStats.transactionsLoggedCount} orders</span>
+            </div>
+            <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl text-center">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Selected Window Item Count</span>
+              <span className="text-2xl font-black text-amber-500 font-mono block mt-1">{customPeriodTerminalStats.totalItemsDispatchedCount} units</span>
+            </div>
+          </div>
+        </section>
+
+        {activeReplenishItem && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
+              <h3 className="text-sm font-bold text-white mb-1">Receive Stock: {formatIngredientLabel(activeReplenishItem)}</h3>
+              <p className="text-[10px] text-slate-400 uppercase font-mono tracking-tight mb-4">Logging units into {selectedOutlet.name} inventory database registries</p>
+              <input type="number" placeholder="Enter exact received amount" value={newRepQty || ''} onChange={(e) => setNewRepQty(Number(e.target.value))} className="w-full rounded bg-slate-950 text-sm p-3 text-emerald-400 border border-slate-700 font-bold outline-none focus:border-emerald-500" />
+              <div className="flex gap-2 mt-5 text-xs font-bold">
+                <button onClick={() => setActiveReplenishItem(null)} className="w-1/2 bg-slate-800 py-2.5 rounded-lg text-slate-300 transition">Cancel</button>
+                <button onClick={handleAddReplenishment} className="w-1/2 bg-emerald-600 py-2.5 rounded-lg text-white transition hover:bg-emerald-500">Confirm Received Stock</button>
+              </div>
+            </div>
+          </div>
         )}
       </main>
     )
@@ -775,486 +552,226 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-slate-950 p-6 font-sans text-slate-100 space-y-6">
-      
-      {notification && (
-        <div className="fixed top-4 right-4 z-50 bg-emerald-600 border border-emerald-400 text-white font-bold py-3 px-5 rounded-xl shadow-2xl text-xs tracking-wide">
-          {notification}
+      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-5 gap-4">
+        <div>
+          <h1 className="text-2xl font-black text-amber-400 tracking-tight">👑 Omkar enterprise Command Dashboard</h1>
+          <p className="text-[10px] text-slate-400 font-mono mt-0.5 uppercase tracking-widest">Cross-Branch Analytics & Inventory Control Console</p>
         </div>
-      )}
-
-      <header className="sticky top-0 bg-slate-955/95 backdrop-blur z-40 border-b border-slate-800 pb-4 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
-        <div className="flex items-center gap-4">
-          <div>
-            <h1 className="text-2xl font-black text-amber-400 tracking-tight">👑 Omkar enterprise Command Dashboard</h1>
-            <p className="text-[10px] text-slate-500 font-mono mt-0.5 uppercase tracking-widest">Global Master Operations, Logistics & Security Panel</p>
-          </div>
-
-          <div className="bg-gradient-to-r from-amber-500/10 to-blue-500/5 border border-amber-500/20 px-4 py-2 rounded-xl hidden md:block">
-            <span className="text-[9px] uppercase font-black text-amber-400 block tracking-widest">Network Top Performer</span>
-            <span className="text-xs font-black text-white font-sans">{getTopPerformerLabel('ALL', liveOperatingDate, liveOperatingDate)}</span>
-          </div>
-        </div>
-        
-        <div className="flex flex-wrap gap-3 w-full xl:w-auto">
-          <div className="bg-slate-900 border border-slate-800 px-4 py-1.5 rounded-xl min-w-[130px]">
-            <span className="text-[9px] uppercase font-bold text-slate-500 block tracking-wider">Network Today Sales</span>
-            <span className="text-lg font-black text-emerald-400 font-mono">${globalPromoterTodaySalesRevenue.toLocaleString()}</span>
-          </div>
-          <div className="bg-slate-900 border border-slate-800 px-4 py-1.5 rounded-xl min-w-[100px]">
-            <span className="text-[9px] uppercase font-bold text-slate-500 block tracking-wider">Net Orders</span>
-            <span className="text-lg font-black text-blue-400 font-mono">{globalPromoterTodayOrderCount}</span>
-          </div>
-          <div className="bg-slate-900 border border-slate-800 px-4 py-1.5 rounded-xl min-w-[100px]">
-            <span className="text-[9px] uppercase font-bold text-slate-500 block tracking-wider">Net Items</span>
-            <span className="text-lg font-black text-amber-500 font-mono">{globalPromoterTodayItemCount}</span>
-          </div>
-          <button onClick={exitToGateway} className="rounded-xl bg-slate-850 px-4 text-xs font-bold text-slate-300 hover:bg-red-900 hover:text-white transition ml-auto xl:ml-0">Exit Portal</button>
-        </div>
+        <button onClick={exitToGateway} className="rounded-lg bg-slate-850 px-4 py-2 text-xs font-bold text-slate-300 hover:bg-red-900 hover:text-white transition">Exit Portal</button>
       </header>
 
-      <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-0.5">
-        <button onClick={() => setPromoterTab('overview')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${promoterTab === 'overview' ? 'bg-slate-900 text-blue-400 border-b-2 border-blue-500' : 'text-slate-500 hover:text-slate-300'}`}>📊 Network Overview</button>
-        <button onClick={() => setPromoterTab('branches')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${promoterTab === 'branches' ? 'bg-slate-900 text-purple-400 border-b-2 border-purple-500' : 'text-slate-500 hover:text-slate-300'}`}>🏪 Branch-by-Branch Matrix</button>
-        <button onClick={() => setPromoterTab('revenue_audit')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${promoterTab === 'revenue_audit' ? 'bg-slate-900 text-emerald-400 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-300'}`}>💵 Revenue Cards</button>
-        <button onClick={() => setPromoterTab('dispatches')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${promoterTab === 'dispatches' ? 'bg-slate-900 text-emerald-400 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-300'}`}>📦 Stock Dispatch Desk</button>
-        <button onClick={() => setPromoterTab('security')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${promoterTab === 'security' ? 'bg-slate-900 text-red-400 border-b-2 border-red-500' : 'text-slate-500 hover:text-slate-300'}`}>🔐 Terminal Security Locks</button>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-slate-900 border border-slate-800/80 p-5 rounded-2xl shadow-lg">
+          <span className="text-[10px] uppercase tracking-widest font-extrabold text-slate-500 block">Network-Wide Today Sales</span>
+          <span className="text-3xl font-black text-emerald-400 tracking-tight font-mono block mt-1">${globalPromoterTodaySalesRevenue.toLocaleString()}</span>
+        </div>
+        <div className="bg-slate-900 border border-slate-800/80 p-5 rounded-2xl shadow-lg">
+          <span className="text-[10px] uppercase tracking-widest font-extrabold text-slate-500 block">Net Orders Today</span>
+          <span className="text-3xl font-black text-blue-400 tracking-tight font-mono block mt-1">{globalPromoterTodayOrderCount}</span>
+        </div>
+        <div className="bg-slate-900 border border-slate-800/80 p-5 rounded-2xl shadow-lg">
+          <span className="text-[10px] uppercase tracking-widest font-extrabold text-slate-500 block">Net Items Today</span>
+          <span className="text-3xl font-black text-amber-500 tracking-tight font-mono block mt-1">{globalPromoterTodayItemCount}</span>
+        </div>
       </div>
 
-      {promoterTab === 'overview' && (
-        <div className="space-y-6">
-          <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <h3 className="text-xs font-bold text-blue-400 uppercase tracking-wider">Network Analytics Audit Filter</h3>
-              <p className="text-[10px] text-slate-500">Isolates global network sheets calculation windows independently</p>
+      <div className="flex gap-2 border-b border-slate-800 pb-1">
+        <button onClick={() => setPromoterTab('logistics')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition border-t-2 ${promoterTab === 'logistics' ? 'bg-slate-900 text-blue-400 border-blue-500' : 'text-slate-500 border-transparent hover:text-slate-300'}`}>🚚 Stock & Logistics Desk</button>
+        <button onClick={() => setPromoterTab('revenue_audit')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition border-t-2 ${promoterTab === 'revenue_audit' ? 'bg-slate-900 text-emerald-400 border-emerald-500' : 'text-slate-500 border-transparent hover:text-slate-300'}`}>💵 Revenue Audit Matrix</button>
+      </div>
+
+      {promoterTab === 'logistics' && (
+        <section className="rounded-2xl bg-slate-900 border border-slate-800 p-6 shadow-xl space-y-4">
+          <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 pb-3 border-b border-slate-800">
+            <div className="flex gap-4 items-center">
+              <button onClick={() => setPromoterActiveTab('consumption')} className={`text-xs font-bold uppercase ${promoterActiveTab === 'consumption' ? 'text-blue-400' : 'text-slate-500'}`}>📊 Consumption Records</button>
+              <button onClick={() => setPromoterActiveTab('dispatches')} className={`text-xs font-bold uppercase ${promoterActiveTab === 'dispatches' ? 'text-emerald-400' : 'text-slate-500'}`}>🚚 Supply Dispatches</button>
             </div>
-            <div className="flex items-center gap-2 bg-slate-950 p-2 rounded-xl border border-slate-800 font-mono text-xs">
-              <span className="text-[10px] font-sans text-slate-500">From:</span>
-              <input type="date" value={overviewStartDate} onChange={(e) => setOverviewStartDate(e.target.value)} className="bg-slate-900 border border-slate-700 rounded px-2 py-0.5 text-white outline-none" />
-              <span className="text-[10px] font-sans text-slate-500">To:</span>
-              <input type="date" value={overviewEndDate} onChange={(e) => setOverviewEndDate(e.target.value)} className="bg-slate-900 border border-slate-700 rounded px-2 py-0.5 text-white outline-none" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {(() => {
-              let rev = 0, ord = 0, itm = 0
-              outlets.forEach(o => {
-                const stats = getOutletSalesStatsForDateRange(o.id, overviewStartDate, overviewEndDate)
-                rev += stats.salesAmountTotal
-                ord += stats.transactionsLoggedCount
-                itm += stats.totalItemsDispatchedCount
-              })
-              return (
-                <>
-                  <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl text-center shadow">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Combined Period Revenue</span>
-                    <span className="text-2xl font-black text-emerald-400 font-mono block mt-1">${rev.toLocaleString()}</span>
-                  </div>
-                  <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl text-center shadow">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Combined Period Orders</span>
-                    <span className="text-2xl font-black text-blue-400 font-mono block mt-1">{ord.toLocaleString()} orders</span>
-                  </div>
-                  <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl text-center shadow">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Combined Period Items Sold</span>
-                    <span className="text-2xl font-black text-amber-500 font-mono block mt-1">{itm.toLocaleString()} units</span>
-                  </div>
-                </>
-              )
-            })()}
-          </div>
-
-          <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-3">Global Menu & Combo Dissection Matrix</h3>
-            <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950">
-              <table className="w-full text-left font-mono text-xs">
-                <thead>
-                  <tr className="bg-slate-900/60 border-b border-slate-800 font-bold text-slate-400">
-                    <th className="p-3">Product Menu Variant</th>
-                    <th className="p-3 text-center">Structure Classification</th>
-                    <th className="p-3 text-center">Price Tag</th>
-                    <th className="p-3 text-center text-blue-400">Network Combined Sales Volume</th>
-                    <th className="p-3 text-right text-emerald-400">Network Total Earned Gross</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/40">
-                  {getProductSalesPerformanceBreakdown('ALL', overviewStartDate, overviewEndDate).map(item => (
-                    <tr key={item.id} className="hover:bg-slate-900/30">
-                      <td className="p-3 font-sans font-bold text-white">{item.name}</td>
-                      <td className="p-3 text-center text-[10px] uppercase font-sans font-bold">
-                        {item.isCombo ? <span className="text-purple-400 bg-purple-950/40 border border-purple-900 px-2 py-0.5 rounded">Combo Package</span> : <span className="text-slate-500">Standalone Item</span>}
-                      </td>
-                      <td className="p-3 text-center text-slate-500">${item.price.toFixed(2)}</td>
-                      <td className="p-3 text-center text-blue-400 font-bold">{item.unitsSold} units</td>
-                      <td className="p-3 text-right text-emerald-400 font-bold">${item.itemRevenue.toLocaleString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {promoterTab === 'branches' && (
-        <div className="space-y-6">
-          <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-            <h3 className="text-xs font-bold text-purple-400 uppercase tracking-wider">Independent Branch Analytics Matrix</h3>
-            <p className="text-[10px] text-slate-500 mt-0.5">Every location operates on completely autonomous independent date range filter controls.</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {outlets.map(o => {
-              const localRange = branchCardDateRanges[o.id] || { start: liveOperatingDate, end: liveOperatingDate }
-              const localStats = getOutletSalesStatsForDateRange(o.id, localRange.start, localRange.end)
-
-              return (
-                <div key={o.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-md flex flex-col justify-between space-y-4">
-                  <div className="flex justify-between items-start border-b border-slate-800 pb-3">
-                    <div>
-                      <h4 className="text-base font-black text-white">{o.name}</h4>
-                      <span className="text-[9px] text-slate-500 uppercase tracking-widest">Active Terminal Outlet</span>
-                    </div>
-                    {terminalSessions.find(s => s.outlet_id === o.id)?.is_logged_in ? (
-                      <span className="bg-emerald-950/80 text-emerald-400 border border-emerald-900 text-[9px] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider animate-pulse">Live</span>
-                    ) : (
-                      <span className="bg-slate-950 text-slate-600 border border-slate-800 text-[9px] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider">Offline</span>
-                    )}
-                  </div>
-
-                  <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 space-y-2">
-                    <span className="text-[9px] uppercase font-bold text-slate-500 block">Card Audit Date Window</span>
-                    <div className="flex items-center justify-between gap-1 font-mono text-[11px]">
-                      <input 
-                        type="date" 
-                        value={localRange.start} 
-                        onChange={(e) => setBranchCardDateRanges(prev => ({ ...prev, [o.id]: { ...prev[o.id], start: e.target.value } }))} 
-                        className="bg-slate-900 border border-slate-700 text-white rounded px-1.5 py-0.5 focus:outline-none w-[105px]" 
-                      />
-                      <span className="text-slate-600 font-sans text-xs">to</span>
-                      <input 
-                        type="date" 
-                        value={localRange.end} 
-                        onChange={(e) => setBranchCardDateRanges(prev => ({ ...prev, [o.id]: { ...prev[o.id], end: e.target.value } }))} 
-                        className="bg-slate-900 border border-slate-700 text-white rounded px-1.5 py-0.5 focus:outline-none w-[105px]" 
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 text-center font-mono text-xs pt-1">
-                    <div className="bg-slate-950/40 p-2 rounded border border-slate-800/60">
-                      <span className="text-[9px] font-sans text-slate-500 block">Revenue</span>
-                      <span className="font-bold text-emerald-400">${localStats.salesAmountTotal}</span>
-                    </div>
-                    <div className="bg-slate-950/40 p-2 rounded border border-slate-800/60">
-                      <span className="text-[9px] font-sans text-slate-500 block">Orders</span>
-                      <span className="font-bold text-blue-400">{localStats.transactionsLoggedCount}</span>
-                    </div>
-                    <div className="bg-slate-950/40 p-2 rounded border border-slate-800/60">
-                      <span className="text-[9px] font-sans text-slate-500 block">Items</span>
-                      <span className="font-bold text-amber-500">{localStats.totalItemsDispatchedCount}</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-950/80 rounded-xl px-3 py-1.5 border border-purple-900/30 text-center">
-                    <span className="text-[10px] font-sans text-purple-400 font-bold block">
-                      ⭐ Window Best Seller: <span className="text-white font-mono font-black">{getTopPerformerLabel(o.id, localRange.start, localRange.end)}</span>
-                    </span>
-                  </div>
-
-                  <div className="bg-slate-950 rounded-xl p-3 border border-slate-800 space-y-1 text-[11px] max-h-36 overflow-y-auto">
-                    <span className="text-[9px] text-purple-400 uppercase font-bold tracking-wider block mb-1">Itemized Sales Dissection:</span>
-                    {getProductSalesPerformanceBreakdown(o.id, localRange.start, localRange.end).map(prod => (
-                      <div key={prod.id} className="flex justify-between items-center font-mono text-slate-400 border-b border-slate-900 pb-0.5 last:border-0">
-                        <span className="font-sans text-white truncate max-w-[130px]">{prod.name}</span>
-                        <span>{prod.unitsSold} units</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {promoterTab === 'revenue_audit' && (
-        <div className="space-y-6">
-          <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-            <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Financial Auditor Suite</h3>
-            <p className="text-[10px] text-slate-500 mt-0.5">Isolated performance revenue matrices logging unit counts and dollar conversions across historical date nodes.</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {outlets.map(o => {
-              const auditRange = revenueCardDateRanges[o.id] || { start: liveOperatingDate, end: liveOperatingDate }
-              const auditStats = getOutletSalesStatsForDateRange(o.id, auditRange.start, auditRange.end)
-
-              return (
-                <div key={o.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-md flex flex-col justify-between space-y-4">
-                  
-                  <div className="flex justify-between items-start border-b border-slate-800 pb-2">
-                    <div>
-                      <h4 className="text-base font-black text-emerald-400">{o.name} Revenue Card</h4>
-                      <span className="text-[9px] text-slate-500 uppercase font-bold tracking-wider">Financial Auditor Suite</span>
-                    </div>
-                    <span className="text-xs font-mono font-black text-emerald-400 bg-slate-950 px-2 py-0.5 border border-slate-800 rounded">${auditStats.salesAmountTotal.toLocaleString()}</span>
-                  </div>
-
-                  <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 space-y-2">
-                    <span className="text-[9px] uppercase font-bold text-slate-500 block">Card Audit Date Window</span>
-                    <div className="flex items-center justify-between gap-1 font-mono text-[11px]">
-                      <input 
-                        type="date" 
-                        value={auditRange.start} 
-                        onChange={(e) => setRevenueCardDateRanges(prev => ({ ...prev, [o.id]: { ...prev[o.id], start: e.target.value } }))} 
-                        className="bg-slate-900 border border-slate-700 text-white rounded px-1.5 py-0.5 focus:outline-none w-[105px]" 
-                      />
-                      <span className="text-slate-600 font-sans text-xs">to</span>
-                      <input 
-                        type="date" 
-                        value={auditRange.end} 
-                        onChange={(e) => setRevenueCardDateRanges(prev => ({ ...prev, [o.id]: { ...prev[o.id], end: e.target.value } }))} 
-                        className="bg-slate-900 border border-slate-700 text-white rounded px-1.5 py-0.5 focus:outline-none w-[105px]" 
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 text-center font-mono text-xs pt-1">
-                    <div className="bg-slate-950/40 p-2 rounded border border-slate-800/60">
-                      <span className="text-[9px] font-sans text-slate-500 block">Total Revenue</span>
-                      <span className="font-bold text-emerald-400">${auditStats.salesAmountTotal.toLocaleString()}</span>
-                    </div>
-                    <div className="bg-slate-950/40 p-2 rounded border border-slate-800/60">
-                      <span className="text-[9px] font-sans text-slate-500 block">Orders Done</span>
-                      <span className="font-bold text-blue-400">{auditStats.transactionsLoggedCount}</span>
-                    </div>
-                    <div className="bg-slate-950/40 p-2 rounded border border-slate-800/60">
-                      <span className="text-[9px] font-sans text-slate-500 block">Menu Items</span>
-                      <span className="font-bold text-amber-500">{auditStats.totalItemsDispatchedCount}</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-amber-500/10 rounded-xl px-3 py-1.5 border border-amber-500/20 text-center">
-                    <span className="text-[10px] font-sans text-amber-400 font-bold block">
-                      🏆 Highest Velocity Seller: <span className="text-white font-mono font-black">{getTopPerformerLabel(o.id, auditRange.start, auditRange.end)}</span>
-                    </span>
-                  </div>
-
-                  <div className="bg-slate-950 rounded-xl p-3 border border-slate-800 space-y-1 text-[11px] max-h-36 overflow-y-auto">
-                    <span className="text-[9px] text-emerald-400 uppercase font-bold tracking-wider block mb-1">Itemized Sales Dissection:</span>
-                    {getProductSalesPerformanceBreakdown(o.id, auditRange.start, auditRange.end).map(prod => (
-                      <div key={prod.id} className="flex justify-between items-center font-mono text-slate-400 border-b border-slate-900 pb-1 pt-0.5 last:border-0">
-                        <span className="font-sans text-white truncate max-w-[130px]">{prod.name}</span>
-                        <div className="text-right space-x-2">
-                          <span className="text-emerald-400 font-bold">${prod.itemRevenue.toLocaleString()}</span>
-                          <span className="text-slate-600 text-[10px]">({prod.unitsSold} qty)</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {promoterTab === 'dispatches' && (
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-          <section className="xl:col-span-4 bg-slate-900 border border-slate-800 rounded-2xl p-6 h-fit space-y-4">
-            <div>
-              <h3 className="text-sm font-bold text-emerald-400 uppercase tracking-wider">Log Distribution Shipment</h3>
-              <p className="text-[10px] text-slate-500">Dispatch raw material inventory assets to network channels safely</p>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div className="flex flex-col space-y-1">
-                <label className="text-slate-400 font-bold uppercase text-[9px] tracking-wider">Select Target Destination Branch:</label>
-                <select value={dispatchOutletId} onChange={(e) => setDispatchOutletId(Number(e.target.value))} className="bg-slate-950 border border-slate-700 p-2.5 rounded-lg text-white font-bold outline-none focus:border-emerald-500">
+            
+            <div className="flex flex-wrap items-center gap-4 bg-slate-950 p-3 rounded-xl border border-slate-800">
+              <div className="flex items-center gap-1.5 text-xs">
+                <span className="text-slate-500 uppercase tracking-wider font-bold text-[10px]">Outlet Target:</span>
+                <select value={auditOutletFilter} onChange={(e) => setAuditOutletFilter(e.target.value)} className="bg-slate-900 border border-slate-700 text-emerald-400 rounded px-2 py-1 font-bold font-mono outline-none">
+                  <option value="ALL">All Outlets Combined</option>
                   {outlets.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
                 </select>
               </div>
 
-              <div className="flex flex-col space-y-1">
-                <label className="text-slate-400 font-bold uppercase text-[9px] tracking-wider">Raw Asset Category Material:</label>
-                <select value={dispatchItemName} onChange={(e) => setDispatchItemName(e.target.value)} className="bg-slate-950 border border-slate-700 p-2.5 rounded-lg text-white font-bold outline-none focus:border-emerald-500">
+              <div className="flex items-center gap-1.5 text-xs">
+                <span className="text-slate-500 uppercase tracking-wider font-bold text-[10px]">Ingredient:</span>
+                <select value={auditIngredient} onChange={(e) => setAuditIngredient(e.target.value)} className="bg-slate-900 border border-slate-700 text-amber-400 rounded px-2 py-1 font-bold font-mono outline-none">
+                  <option value="ALL">All Ingredients</option>
                   {distinctIngredients.map(ing => <option key={ing} value={ing}>{formatIngredientLabel(ing)}</option>)}
                 </select>
               </div>
-
-              <div className="flex flex-col space-y-1">
-                <label className="text-slate-400 font-bold uppercase text-[9px] tracking-wider">Transfer Allocation Date (Explicit):</label>
-                <input type="date" value={dispatchDate} onChange={(e) => setDispatchDate(e.target.value)} className="bg-slate-950 border border-slate-700 p-2.5 rounded-lg text-white font-mono outline-none focus:border-emerald-500" />
+              
+              <div className="flex items-center gap-1.5 text-xs font-mono">
+                <span className="text-slate-500 uppercase tracking-wider font-bold text-[10px] font-sans">From:</span>
+                <input type="date" value={auditStartDate} onChange={(e) => setAuditStartDate(e.target.value)} className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white outline-none text-xs" />
+                <span className="text-slate-500 uppercase tracking-wider font-bold text-[10px] font-sans">To:</span>
+                <input type="date" value={auditEndDate} onChange={(e) => setAuditEndDate(e.target.value)} className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white outline-none text-xs" />
               </div>
-
-              <div className="flex flex-col space-y-1">
-                <label className="text-slate-400 font-bold uppercase text-[9px] tracking-wider">Exact Unit Volume Despatched:</label>
-                <input type="number" placeholder="0" value={dispatchQty || ''} onChange={(e) => setDispatchQty(Number(e.target.value))} className="bg-slate-950 border border-slate-700 p-2.5 rounded-lg text-emerald-400 font-mono font-bold text-sm outline-none focus:border-emerald-500" />
-              </div>
-
-              <button onClick={handleExecuteStockDispatch} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition uppercase tracking-wider text-xs shadow-md pt-2.5">
-                Execute Stock Dispatch
-              </button>
             </div>
-          </section>
-
-          <section className="xl:col-span-8 bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
-            <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 pb-2 border-b border-slate-800">
-              <div>
-                <h4 className="text-xs font-bold text-slate-300 uppercase tracking-widest">Historical Spreadsheet Filter</h4>
-                <p className="text-[9px] text-slate-500">Audits structural incoming or outgoing raw quantities matrix logs</p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 bg-slate-950 p-2 rounded-xl border border-slate-800 text-[11px]">
-                <select value={promoterActiveTab} onChange={(e) => setPromoterActiveTab(e.target.value as any)} className="bg-slate-900 border border-slate-700 text-blue-400 rounded px-1.5 py-0.5 font-bold outline-none">
-                  <option value="consumption">Stock Out (Sales)</option>
-                  <option value="dispatches">Stock In (Sent)</option>
-                </select>
-                <select value={auditOutletFilter} onChange={(e) => setAuditOutletFilter(e.target.value)} className="bg-slate-900 border border-slate-700 text-slate-300 rounded px-1.5 py-0.5 outline-none">
-                  <option value="ALL">All Outlets</option>
-                  {outlets.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-                </select>
-                <select value={auditIngredient} onChange={(e) => setAuditIngredient(e.target.value)} className="bg-slate-900 border border-slate-700 text-slate-300 rounded px-1.5 py-0.5 outline-none">
-                  <option value="ALL">All Materials</option>
-                  {distinctIngredients.map(ing => <option key={ing} value={ing}>{formatIngredientLabel(ing)}</option>)}
-                </select>
-                <div className="flex items-center gap-1 border-l border-slate-800 pl-1">
-                  <input type="date" value={auditStartDate} onChange={(e) => setAuditStartDate(e.target.value)} className="bg-slate-900 border border-slate-700 rounded px-1 py-0.5 text-white w-[110px]" />
-                  <span className="text-[10px] text-slate-500">to</span>
-                  <input type="date" value={auditEndDate} onChange={(e) => setAuditEndDate(e.target.value)} className="bg-slate-900 border border-slate-700 rounded px-1 py-0.5 text-white w-[110px]" />
-                </div>
-              </div>
-            </header>
-
-            <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950">
-              <table className="w-full text-left border-collapse font-mono text-xs">
-                <thead>
-                  <tr className="border-b border-slate-800 bg-slate-900 text-slate-400 font-bold uppercase tracking-wider text-center">
-                    <th className="py-3 px-3 text-left w-32 bg-slate-900 sticky left-0 z-10 border-r border-slate-800">Timeline Date</th>
-                    {currentRenderHeaders.map(colHeader => (
-                      <th key={colHeader} className="py-3 px-2">{formatIngredientLabel(colHeader)}</th>
-                    ))}
-                    <th className="py-3 px-3 bg-blue-950/40 text-blue-400 border-l border-slate-800">Period Total</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60 text-center">
-                  {auditDatesArray.map(dateString => {
-                    let dailyRowRunningSum = 0
-
-                    return (
-                      <tr key={dateString} className="hover:bg-slate-900/40 transition">
-                        <td className="py-2.5 px-3 text-left font-bold text-slate-400 bg-slate-950 sticky left-0 z-10 border-r border-slate-800 font-sans text-xs">{dateString}</td>
-                        {currentRenderHeaders.map(colHeader => {
-                          let computedValue = 0
-
-                          if (promoterActiveTab === 'consumption') {
-                            if (shouldRenderIngredientColumns) {
-                              const targetIngName = colHeader
-                              computedValue = allSalesHistory.filter(s => {
-                                const cleanDbDate = s.date_string ? s.date_string.split('T')[0] : ''
-                                return s.item_name === targetIngName && (auditOutletFilter === 'ALL' || s.outlet_id === Number(auditOutletFilter)) && cleanDbDate === dateString
-                              }).reduce((a, c) => a + Number(c.quantity_sold), 0)
-                            } else {
-                              const targetOutletId = outlets.find(o => o.name === colHeader)?.id || 0
-                              computedValue = allSalesHistory.filter(s => {
-                                const cleanDbDate = s.date_string ? s.date_string.split('T')[0] : ''
-                                return s.item_name === auditIngredient && s.outlet_id === targetOutletId && cleanDbDate === dateString
-                              }).reduce((a, c) => a + Number(c.quantity_sold), 0)
-                            }
-                          } else {
-                            if (shouldRenderIngredientColumns) {
-                              const targetIngName = colHeader
-                              computedValue = allReplenishments.filter(r => {
-                                const rowDate = r.created_at?.split('T')[0] || liveOperatingDate
-                                return r.item_name === targetIngName && (auditOutletFilter === 'ALL' || r.outlet_id === Number(auditOutletFilter)) && rowDate === dateString
-                              }).reduce((a, c) => a + Number(c.quantity_added), 0)
-                            } else {
-                              const targetOutletId = outlets.find(o => o.name === colHeader)?.id || 0
-                              computedValue = allReplenishments.filter(r => {
-                                const rowDate = r.created_at?.split('T')[0] || liveOperatingDate
-                                return r.item_name === auditIngredient && r.outlet_id === targetOutletId && rowDate === dateString
-                              }).reduce((a, c) => a + Number(c.quantity_added), 0)
-                            }
-                          }
-
-                          dailyRowRunningSum += computedValue
-                          dynamicBottomTotals[colHeader] += computedValue
-
-                          return (
-                            <td key={colHeader} className={`py-2.5 px-2 font-bold ${computedValue > 0 ? (promoterActiveTab === 'consumption' ? 'text-amber-500' : 'text-emerald-400 font-black text-sm') : 'text-slate-700'}`}>{computedValue || '-'}</td>
-                          )
-                        })}
-                        <td className="py-2.5 px-3 bg-blue-950/40 text-blue-400 font-bold text-right border-l border-slate-800">
-                          {dailyRowRunningSum.toLocaleString()}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                  <tr className="border-t-2 border-slate-700 bg-slate-900 font-sans text-xs font-black text-center text-white shadow-inner">
-                    <td className="py-3.5 px-3 text-left bg-slate-900 font-extrabold text-blue-400 uppercase tracking-wider sticky left-0 z-10 border-r border-slate-800">Total Sum</td>
-                    {currentRenderHeaders.map(colHeader => {
-                      const verticalTotal = dynamicBottomTotals[colHeader]
-                      spreadsheetGrandTotal += verticalTotal
-                      return <td key={colHeader} className={`py-3.5 px-2 font-mono text-sm tracking-tight ${verticalTotal > 0 ? 'text-emerald-400 font-black' : 'text-slate-500'}`}>{verticalTotal || 0}</td>
-                    })}
-                    <td className="py-3.5 px-3 bg-emerald-950/40 border-l border-slate-800 font-mono text-base text-emerald-400 font-black">{spreadsheetGrandTotal.toLocaleString()}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </div>
-      )}
-
-      {promoterTab === 'security' && (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
-          <div>
-            <h3 className="text-sm font-bold text-red-400 uppercase tracking-wider">Multi-Device Anti-Fraud Session Controller</h3>
-            <p className="text-[10px] text-slate-500">Enforces an absolute single-screen policy per outlet terminal. Clear stuck or zombie devices instantly down below.</p>
-          </div>
+          </header>
 
           <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950">
-            <table className="w-full text-left font-mono text-xs">
+            <table className="w-full text-left border-collapse font-mono text-xs">
               <thead>
-                <tr className="bg-slate-900 text-slate-400 border-b border-slate-800 font-bold">
-                  <th className="p-3">Counter Terminal Group</th>
-                  <th className="p-3 text-center">Login Security Lock State</th>
-                  <th className="p-3 text-center">Last Active Heartbeat Check</th>
-                  <th className="p-3 text-right">Master Override Action</th>
+                <tr className="border-b border-slate-800 bg-slate-900 text-slate-400 font-bold uppercase tracking-wider text-center">
+                  <th className="py-3 px-3 text-left w-32 bg-slate-900 sticky left-0 z-10 border-r border-slate-800">Timeline Date</th>
+                  {currentRenderHeaders.map(colHeader => (
+                    <th key={colHeader} className="py-3 px-2">{formatIngredientLabel(colHeader)}</th>
+                  ))}
+                  <th className="py-3 px-3 bg-blue-950/40 text-blue-400 border-l border-slate-800">Period Total</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/40">
-                {outlets.map(o => {
-                  const sessionState = terminalSessions.find(s => s.outlet_id === o.id)
+              <tbody className="divide-y divide-slate-800/60 text-center">
+                {auditDatesArray.map(dateString => {
+                  let dailyRowRunningSum = 0
+                  const loopDayInteger = new Date(dateString).getDate()
+
                   return (
-                    <tr key={o.id} className="hover:bg-slate-900/20">
-                      <td className="p-3 font-sans font-bold text-white">{o.name}</td>
-                      <td className="p-3 text-center">
-                        {sessionState?.is_logged_in ? (
-                          <span className="bg-red-950 text-red-400 border border-red-900 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">LOCKED IN USE</span>
-                        ) : (
-                          <span className="bg-slate-900 text-slate-500 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">UNLOCKED FREE</span>
-                        )}
-                      </td>
-                      <td className="p-3 text-center text-slate-400 font-mono text-[11px]">
-                        {sessionState?.last_active_at ? new Date(sessionState.last_active_at).toLocaleTimeString() : 'No activity logged'}
-                      </td>
-                      <td className="p-3 text-right">
-                        <button 
-                          disabled={!sessionState?.is_logged_in}
-                          onClick={() => handleForceTerminateSession(o.id)}
-                          className={`px-3 py-1 rounded text-[10px] uppercase font-bold transition ${sessionState?.is_logged_in ? 'bg-red-600 text-white hover:bg-red-500 shadow-md' : 'bg-slate-900 text-slate-700 cursor-not-allowed'}`}
-                        >
-                          Force Reset Session
-                        </button>
+                    <tr key={dateString} className="hover:bg-slate-900/40 transition">
+                      <td className="py-2.5 px-3 text-left font-bold text-slate-400 bg-slate-950 sticky left-0 z-10 border-r border-slate-800 font-sans text-xs">{dateString}</td>
+                      {currentRenderHeaders.map(colHeader => {
+                        let computedValue = 0
+
+                        if (promoterActiveTab === 'consumption') {
+                          if (shouldRenderIngredientColumns) {
+                            const targetIngName = colHeader
+                            computedValue = allSalesHistory.filter(s => {
+                              const recDayStr = s.created_at ? s.created_at.split('T')[0] : ''
+                              const matchesOutlet = auditOutletFilter === 'ALL' || s.outlet_id === Number(auditOutletFilter)
+                              return s.item_name === targetIngName && matchesOutlet && recDayStr === dateString
+                            }).reduce((a, c) => a + Number(c.quantity_sold), 0)
+                          } else {
+                            const targetOutletId = outlets.find(o => o.name === colHeader)?.id || 0
+                            computedValue = allSalesHistory.filter(s => {
+                              const recDayStr = s.created_at ? s.created_at.split('T')[0] : ''
+                              return s.item_name === auditIngredient && s.outlet_id === targetOutletId && recDayStr === dateString
+                            }).reduce((a, c) => a + Number(c.quantity_sold), 0)
+                          }
+                        } else {
+                          if (shouldRenderIngredientColumns) {
+                            const targetIngName = colHeader
+                            computedValue = allReplenishments.filter(r => {
+                              const matchesOutlet = auditOutletFilter === 'ALL' || r.outlet_id === Number(auditOutletFilter)
+                              return r.item_name === targetIngName && r.day_of_month === loopDayInteger && matchesOutlet
+                            }).reduce((a, c) => a + Number(c.quantity_added), 0)
+                          } else {
+                            const targetOutletId = outlets.find(o => o.name === colHeader)?.id || 0
+                            computedValue = allReplenishments.filter(r => {
+                              return r.item_name === auditIngredient && r.outlet_id === targetOutletId && r.day_of_month === loopDayInteger
+                            }).reduce((a, c) => a + Number(c.quantity_added), 0)
+                          }
+                        }
+
+                        dailyRowRunningSum += computedValue
+                        dynamicBottomTotals[colHeader] += computedValue
+
+                        return (
+                          <td key={colHeader} className={`py-2.5 px-2 font-bold ${computedValue > 0 ? (promoterActiveTab === 'consumption' ? 'text-amber-500' : 'text-emerald-400 font-black text-sm') : 'text-slate-700'}`}>{computedValue || '-'}</td>
+                        )
+                      })}
+                      <td className="py-2.5 px-3 bg-blue-950/40 text-blue-400 font-bold text-right border-l border-slate-800">
+                        {dailyRowRunningSum.toLocaleString()}
                       </td>
                     </tr>
                   )
                 })}
+                <tr className="border-t-2 border-slate-700 bg-slate-900 font-sans text-xs font-black text-center text-white shadow-inner">
+                  <td className="py-3.5 px-3 text-left bg-slate-900 font-extrabold text-blue-400 uppercase tracking-wider sticky left-0 z-10 border-r border-slate-800">Total Sum</td>
+                  {currentRenderHeaders.map(colHeader => {
+                    const verticalTotal = dynamicBottomTotals[colHeader]
+                    spreadsheetGrandTotal += verticalTotal
+                    return <td key={colHeader} className={`py-3.5 px-2 font-mono text-sm tracking-tight ${verticalTotal > 0 ? 'text-emerald-400 font-black' : 'text-slate-500'}`}>{verticalTotal || 0}</td>
+                  })}
+                  <td className="py-3.5 px-3 bg-emerald-950/40 border-l border-slate-800 font-mono text-base text-emerald-400 font-black">{spreadsheetGrandTotal.toLocaleString()}</td>
+                </tr>
               </tbody>
             </table>
           </div>
+        </section>
+      )}
+
+      {/* NEW AUDIT MATRIX TAB: Styled exactly like your laptop screen reference image */}
+      {promoterTab === 'revenue_audit' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {outlets.map(o => {
+            const range = revenueCardDateRanges[o.id] || { start: getTodayDateString(), end: getTodayDateString() }
+            const stats = getOutletSalesStatsForDateRange(o.id, range.start, range.end)
+
+            return (
+              <div key={o.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col justify-between space-y-4">
+                
+                <div className="flex justify-between items-start border-b border-slate-800 pb-2">
+                  <div>
+                    <h4 className="text-base font-black text-white">{o.name} Revenue Card</h4>
+                    <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider">Financial Auditor Suite</span>
+                  </div>
+                  <span className="text-xs font-mono font-black text-emerald-400 bg-slate-950 border border-slate-800 px-2 py-0.5 rounded">${stats.salesAmountTotal.toLocaleString()}</span>
+                </div>
+
+                <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 space-y-2">
+                  <span className="text-[9px] uppercase font-bold text-slate-500 block">Card Audit Date Window</span>
+                  <div className="flex items-center justify-between gap-1 font-mono text-[11px]">
+                    <input 
+                      type="date" 
+                      value={range.start} 
+                      onChange={(e) => setRevenueCardDateRanges(prev => ({ ...prev, [o.id]: { ...prev[o.id], start: e.target.value } }))} 
+                      className="bg-slate-900 border border-slate-700 text-white rounded px-1.5 py-0.5 focus:outline-none w-[105px]" 
+                    />
+                    <span className="text-slate-600 font-sans text-xs">to</span>
+                    <input 
+                      type="date" 
+                      value={range.end} 
+                      onChange={(e) => setRevenueCardDateRanges(prev => ({ ...prev, [o.id]: { ...prev[o.id], end: e.target.value } }))} 
+                      className="bg-slate-900 border border-slate-700 text-white rounded px-1.5 py-0.5 focus:outline-none w-[105px]" 
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center font-mono text-[11px] pt-1">
+                  <div className="bg-slate-950/40 p-2 rounded border border-slate-800/60">
+                    <span className="text-[9px] font-sans text-slate-500 block">Total Revenue</span>
+                    <span className="font-bold text-emerald-400">${stats.salesAmountTotal.toLocaleString()}</span>
+                  </div>
+                  <div className="bg-slate-950/40 p-2 rounded border border-slate-800/60">
+                    <span className="text-[9px] font-sans text-slate-500 block">Orders Done</span>
+                    <span className="font-bold text-blue-400">{stats.transactionsLoggedCount}</span>
+                  </div>
+                  <div className="bg-slate-950/40 p-2 rounded border border-slate-800/60">
+                    <span className="text-[9px] font-sans text-slate-500 block">Menu Items</span>
+                    <span className="font-bold text-amber-500">{stats.totalItemsDispatchedCount}</span>
+                  </div>
+                </div>
+
+                <div className="bg-slate-950 rounded-xl px-3 py-1.5 border border-amber-500/10 text-center">
+                  <span className="text-[10px] font-sans text-amber-400 font-bold block">
+                    🏆 Highest Velocity Seller: <span className="text-white font-mono font-black">{stats.highestName}</span>
+                  </span>
+                </div>
+
+                <div className="bg-slate-950 rounded-xl p-3 border border-slate-800 space-y-1 text-[11px] max-h-40 overflow-y-auto">
+                  <span className="text-[9px] text-emerald-400 uppercase font-bold tracking-wider block mb-1">Itemized Sales Dissection:</span>
+                  {menuItems.filter(m => !m.isCombo).map(prod => {
+                    const qtySold = stats.breakdownQuantities[prod.name] || 0;
+                    const revenueEarned = qtySold * prod.price;
+                    return (
+                      <div key={prod.id} className="flex justify-between items-center font-mono text-slate-400 border-b border-slate-900 pb-1 pt-0.5 last:border-0">
+                        <span className="font-sans text-white truncate max-w-[130px]">{prod.name}</span>
+                        <div className="text-right space-x-2">
+                          <span className="text-emerald-400 font-bold">${revenueEarned.toLocaleString()}</span>
+                          <span className="text-slate-600 text-[10px]">({qtySold} qty)</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+              </div>
+            )
+          })}
         </div>
       )}
     </main>

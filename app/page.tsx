@@ -8,7 +8,7 @@ import { supabase } from './supabase';
 // ==========================================
 const OUTLETS = [
   { id: 1, name: 'Outlet 1', pass: 'omk1@78' },
-  { id: 2, name: 'Outlet 2', pass: 'omk2@45' },
+  { id: 2, name: 'Outlet 2', pass: 'omk2@49' },
   { id: 3, name: 'Outlet 3', pass: 'omk3@91' },
   { id: 4, name: 'Outlet 4', pass: 'omk4@63' },
   { id: 5, name: 'Outlet 5', pass: 'omk5@12' },

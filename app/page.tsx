@@ -1,768 +1,867 @@
-'use client'
-import { useState, useEffect } from 'react'
-import { supabase } from './supabase'
+"use client";
 
-export const dynamic = 'force-dynamic'
-export const experimental_ppr = false
+import React, { useState, useEffect } from 'react';
+// Connects directly to your project's existing database configuration file
+import { supabase } from './supabase'; 
 
-interface Outlet {
-  id: number
-  name: string
-}
+// ==========================================
+// 1. HARDCODED NETWORK CONFIGURATION
+// ==========================================
+const OUTLETS = [
+  { id: 1, name: 'Outlet 1', pass: 'out1@omkar' },
+  { id: 2, name: 'Outlet 2', pass: 'out2@omkar' },
+  { id: 3, name: 'Outlet 3', pass: 'out3@omkar' },
+  { id: 4, name: 'Outlet 4', pass: 'out4@omkar' },
+  { id: 5, name: 'Outlet 5', pass: 'out5@omkar' },
+  { id: 6, name: 'Outlet 6', pass: 'out6@omkar' },
+];
 
-interface MenuItem {
-  id: string
-  name: string
-  price: number
-  isCombo: boolean
-  recipe: { ingredient: string; qty: number }[]
-}
+const PROMOTER_PASS = 'master@omkar';
 
-interface InventoryItem {
-  id: number
-  outlet_id: number
-  item_name: string
-  stock_on_first: number
-}
+const MENU_ITEMS = [
+  { name: 'Item 1', type: 'STANDALONE ITEM', price: 10, recipe: { 'Egg': 2, 'Wheat': 1, 'Boxes': 1 } },
+  { name: 'Item 2', type: 'STANDALONE ITEM', price: 12, recipe: { 'Egg': 1, 'Wheat': 2, 'Boxes': 1 } },
+  { name: 'Item 3', type: 'STANDALONE ITEM', price: 15, recipe: { 'Egg': 2, 'Wheat': 2, 'Boxes': 1 } },
+  { name: 'Item 4', type: 'STANDALONE ITEM', price: 18, recipe: { 'Egg': 3, 'Wheat': 1, 'Boxes': 1 } },
+  { name: 'Item 5', type: 'STANDALONE ITEM', price: 20, recipe: { 'Egg': 2, 'Wheat': 3, 'Boxes': 1 } },
+  { name: 'Item 6', type: 'STANDALONE ITEM', price: 25, recipe: { 'Egg': 4, 'Wheat': 2, 'Boxes': 1 } },
+  { name: 'Combo 1', type: 'COMBO VARIANT', price: 35, recipe: { 'Egg': 4, 'Wheat': 3, 'Water bottle': 1, 'Boxes': 2 } },
+  { name: 'Combo 2', type: 'COMBO VARIANT', price: 42, recipe: { 'Egg': 5, 'Wheat': 4, 'Water bottle': 1, 'Boxes': 2 } },
+  { name: 'Combo 3', type: 'COMBO VARIANT', price: 50, recipe: { 'Egg': 6, 'Wheat': 5, 'Water bottle': 2, 'Boxes': 3 } },
+  { name: 'Combo 4', type: 'COMBO VARIANT', price: 60, recipe: { 'Egg': 8, 'Wheat': 6, 'Water bottle': 2, 'Boxes': 4 } },
+];
 
-interface ReplenishmentLog {
-  id: number
-  outlet_id: number
-  item_name: string
-  day_of_month: number
-  quantity_added: number
-}
+const RAW_ITEMS = ['Egg', 'Wheat', 'Water bottle', 'Boxes'];
+const INITIAL_BASE_STOCK: Record<string, number> = {
+  'Egg': 500,
+  'Wheat': 300,
+  'Water bottle': 100,
+  'Boxes': 200
+};
 
-interface SalesLog {
-  id: number
-  outlet_id: number
-  item_name: string
-  quantity_sold: number
-  created_at: string
-}
+// Formatting helpers
+const formatCurrency = (val: number) => `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const getTodayDateString = () => new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+const getISODateOnly = (date: Date) => date.toISOString().split('T')[0];
 
-export default function Home() {
-  const [currentMode, setCurrentMode] = useState<'gate' | 'outlet' | 'promoter'>('gate')
-  const [selectedOutlet, setSelectedOutlet] = useState<Outlet | null>(null)
-  const [passwordInput, setPasswordInput] = useState('')
-  const [errorMessage, setErrorMessage] = useState('')
+export default function OmkarEnterpriseApp() {
+  // ==========================================
+  // 2. GLOBAL STATE MATRIX
+  // ==========================================
+  const [session, setSession] = useState<{ type: 'OUTLET' | 'PROMOTER'; id?: number; name: string } | null>(null);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [selectedOutletId, setSelectedOutletId] = useState<number>(1);
+  const [loginError, setLoginError] = useState('');
+
+  // Tab management systems
+  const [outletTab, setOutletTab] = useState<'MENU' | 'INVENTORY' | 'RECEIVED' | 'REVENUE'>('MENU');
+  const [promoterTab, setPromoterTab] = useState<'OVERVIEW' | 'BRANCH_ITEMS' | 'BRANCH_REVENUE' | 'STOCK_DISPATCH'>('OVERVIEW');
+
+  // Real-time Database Pool arrays
+  const [salesHistory, setSalesHistory] = useState<any[]>([]);
+  const [replenishments, setReplenishments] = useState<any[]>([]);
+
+  // Selection Inputs
+  const [orderQuantities, setOrderQuantities] = useState<Record<string, number>>({});
+  const [outletDateFrom, setOutletDateFrom] = useState(getISODateOnly(new Date()));
+  const [outletDateTo, setOutletDateTo] = useState(getISODateOnly(new Date()));
   
-  const [inventory, setInventory] = useState<InventoryItem[]>([])
-  const [allReplenishments, setAllReplenishments] = useState<ReplenishmentLog[]>([])
-  const [allSalesHistory, setAllSalesHistory] = useState<SalesLog[]>([])
-  const [loading, setLoading] = useState(false)
-  const [quantities, setQuantities] = useState<{ [key: string]: number }>({})
+  const [promoterDateFrom, setPromoterDateFrom] = useState(getISODateOnly(new Date(new Date().setDate(new Date().getDate() - 7))));
+  const [promoterDateTo, setPromoterDateTo] = useState(getISODateOnly(new Date()));
 
-  const [promoterActiveTab, setPromoterActiveTab] = useState<'consumption' | 'dispatches'>('consumption')
-  
-  // NEW STATE FOR OUTLET DASHBOARD 4-TAB NAVIGATION
-  const [outletActiveTab, setOutletActiveTab] = useState<'menu' | 'inventory' | 'replenishments' | 'history'>('menu')
+  // Form states
+  const [dispatchOutlet, setDispatchOutlet] = useState<number>(1);
+  const [dispatchItem, setDispatchItem] = useState<string>('Egg');
+  const [dispatchQty, setDispatchQty] = useState<string>('');
+  const [dispatchLoading, setDispatchLoading] = useState(false);
+  const [orderLoading, setOrderLoading] = useState(false);
 
-  // Hardcoded helper to grab standard YYYY-MM-DD
-  const getTodayDateString = () => {
-    const today = new Date()
-    const yyyy = today.getFullYear()
-    const mm = String(today.getMonth() + 1).padStart(2, '0')
-    const dd = String(today.getDate()).padStart(2, '0')
-    return `${yyyy}-${mm}-${dd}`
-  }
-
-  // FIXED CALENDAR DATE: Outlets are hardcoded to today's machine clock. No manual updates allowed.
-  const liveOperatingDate = getTodayDateString()
-  
-  // States for Outlet Performance custom time-frame lookup
-  const [outletPeriodStart, setOutletPeriodStart] = useState<string>(getTodayDateString())
-  const [outletPeriodEnd, setOutletPeriodEnd] = useState<string>(getTodayDateString())
-
-  // States for Promoter Master Dashboard range filters
-  const [auditStartDate, setAuditStartDate] = useState<string>(() => {
-    const today = new Date()
-    const mm = String(today.getMonth() + 1).padStart(2, '0')
-    return `${today.getFullYear()}-${mm}-01`
-  })
-  const [auditEndDate, setAuditEndDate] = useState<string>(getTodayDateString())
-  const [auditIngredient, setAuditIngredient] = useState<string>('ALL')
-  const [auditOutletFilter, setAuditOutletFilter] = useState<string>('ALL')
-
-  const [activeReplenishItem, setActiveReplenishItem] = useState<string | null>(null)
-  const [newRepQty, setNewRepQty] = useState(0)
-
-  const outlets: Outlet[] = [
-    { id: 1, name: 'Outlet 1' }, { id: 2, name: 'Outlet 2' }, { id: 3, name: 'Outlet 3' },
-    { id: 4, name: 'Outlet 4' }, { id: 5, name: 'Outlet 5' }, { id: 6, name: 'Outlet 6' },
-  ]
-
-  const menuItems: MenuItem[] = [
-    { id: 'i1', name: 'Item 1', price: 10, isCombo: false, recipe: [{ ingredient: 'Egg', qty: 1 }, { ingredient: 'Boxes', qty: 1 }] },
-    { id: 'i2', name: 'Item 2', price: 12, isCombo: false, recipe: [{ ingredient: 'Wheat', qty: 1 }, { ingredient: 'Boxes', qty: 1 }] },
-    { id: 'i3', name: 'Item 3', price: 15, isCombo: false, recipe: [{ ingredient: 'Ing3', qty: 1 }, { ingredient: 'Boxes', qty: 1 }] },
-    { id: 'i4', name: 'Item 4', price: 18, isCombo: false, recipe: [{ ingredient: 'Ing4', qty: 1 }, { ingredient: 'Boxes', qty: 1 }] },
-    { id: 'i5', name: 'Item 5', price: 20, isCombo: false, recipe: [{ ingredient: 'Ing5', qty: 1 }, { ingredient: 'Boxes', qty: 1 }] },
-    { id: 'i6', name: 'Item 6', price: 25, isCombo: false, recipe: [{ ingredient: 'Water bottle', qty: 1 }] },
-    
-    { id: 'c1', name: 'Combo 1', price: 35, isCombo: true, recipe: [{ ingredient: 'Egg', qty: 2 }, { ingredient: 'Wheat', qty: 2 }, { ingredient: 'Boxes', qty: 1 }] },
-    { id: 'c2', name: 'Combo 2', price: 45, isCombo: true, recipe: [{ ingredient: 'Ing3', qty: 2 }, { ingredient: 'Ing4', qty: 2 }, { ingredient: 'Boxes', qty: 1 }] },
-    { id: 'c3', name: 'Combo 3', price: 50, isCombo: true, recipe: [{ ingredient: 'Egg', qty: 2 }, { ingredient: 'Ing5', qty: 2 }, { ingredient: 'Boxes', qty: 2 }] },
-    { id: 'c4', name: 'Combo 4', price: 60, isCombo: true, recipe: [{ ingredient: 'Egg', qty: 2 }, { ingredient: 'Wheat', qty: 2 }, { ingredient: 'Water bottle', qty: 2 }, { ingredient: 'Boxes', qty: 2 }] },
-  ]
-
-  const distinctIngredients = ['Egg', 'Wheat', 'Ing3', 'Ing4', 'Ing5', 'Water bottle', 'Boxes']
-
-  const formatIngredientLabel = (name: string) => {
-    if (name === 'Egg') return 'ing1'
-    if (name === 'Wheat') return 'ing2'
-    return name
-  }
-
+  // ==========================================
+  // 3. REAL-TIME ENGINE PIPELINES (INSTANT SYNC)
+  // ==========================================
   useEffect(() => {
-    if (currentMode === 'outlet' && selectedOutlet) {
-      syncGlobalDatabaseData(selectedOutlet.id)
-    } else if (currentMode === 'promoter') {
-      syncGlobalDatabaseData()
+    fetchData();
+
+    // Subscribe to database hooks for real-time automatic synchronization
+    const salesChannel = supabase
+      .channel('sales-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_history' }, () => { fetchData(); })
+      .subscribe();
+
+    const stockChannel = supabase
+      .channel('stock-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_replenishments' }, () => { fetchData(); })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(salesChannel);
+      supabase.removeChannel(stockChannel);
+    };
+  }, []);
+
+  const fetchData = async () => {
+    const { data: sales } = await supabase.from('sales_history').select('*');
+    const { data: reps } = await supabase.from('inventory_replenishments').select('*');
+    if (sales) setSalesHistory(sales);
+    if (reps) setReplenishments(reps);
+  };
+
+  // ==========================================
+  // 4. CORE ENGINE OPERATIONS (DUAL LOGGING)
+  // ==========================================
+  const handlePunchOrder = async () => {
+    if (!session || session.type !== 'OUTLET') return;
+    
+    const chosenItems = MENU_ITEMS.filter(item => (orderQuantities[item.name] || 0) > 0);
+    if (chosenItems.length === 0) {
+      alert('Please select quantities for menu items before punching.');
+      return;
     }
-  }, [currentMode, selectedOutlet])
 
-  const syncGlobalDatabaseData = async (targetOutletId?: number) => {
-    setLoading(true)
-    const invQuery = supabase.from('inventory').select('*')
-    const repQuery = supabase.from('inventory_replenishments').select('*')
-    const salesQuery = supabase.from('sales_history').select('*')
+    setOrderLoading(true);
+    const uniqueOrderGroupId = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+    const insertions: any[] = [];
 
-    if (targetOutletId) {
-      invQuery.eq('outlet_id', targetOutletId)
-      repQuery.eq('outlet_id', targetOutletId)
-      salesQuery.eq('outlet_id', targetOutletId)
+    chosenItems.forEach(menuItem => {
+      const qty = orderQuantities[menuItem.name] || 0;
+
+      // Log 1: The Product Row (Fixes True Revenue & Top Performer metrics)
+      insertions.push({
+        outlet_id: session.id,
+        item_name: menuItem.name,
+        quantity_sold: qty,
+        order_group_id: uniqueOrderGroupId
+      });
+
+      // Log 2: The Ingredients Breakdown (Fixes Live Inventory Blueprint calculations)
+      Object.entries(menuItem.recipe).forEach(([ingredientName, ingredientQtyPerUnit]) => {
+        insertions.push({
+          outlet_id: session.id,
+          item_name: ingredientName,
+          quantity_sold: ingredientQtyPerUnit * qty,
+          order_group_id: uniqueOrderGroupId
+        });
+      });
+    });
+
+    const { error } = await supabase.from('sales_history').insert(insertions);
+    setOrderLoading(false);
+
+    if (error) {
+      alert(`Order transmission error: ${error.message}`);
+    } else {
+      setOrderQuantities({});
+      alert('Order punched successfully! Real-time screens synchronized.');
+      fetchData();
+    }
+  };
+
+  const handleDispatchStock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const qty = parseFloat(dispatchQty);
+    if (!qty || qty <= 0) {
+      alert('Please enter a valid amount.');
+      return;
     }
 
-    const { data: iData } = await invQuery.order('id', { ascending: true })
-    const { data: rData } = await repQuery
-    const { data: sData } = await salesQuery
+    setDispatchLoading(true);
+    const { error } = await supabase.from('inventory_replenishments').insert({
+      outlet_id: dispatchOutlet,
+      item_name: dispatchItem,
+      day_of_month: new Date().getDate(),
+      quantity_added: qty
+    });
+    setDispatchLoading(false);
 
-    if (iData) setInventory(iData)
-    if (rData) setAllReplenishments(rData)
-    if (sData) setAllSalesHistory(sData)
-    setLoading(false)
-  }
+    if (error) {
+      alert(`Dispatch pipeline failed: ${error.message}`);
+    } else {
+      setDispatchQty('');
+      alert(`Successfully dispatched ${qty} units of ${dispatchItem}!`);
+      fetchData();
+    }
+  };
 
-  const handleSystemGateUnlock = async () => {
-    if (!selectedOutlet) {
-      if (passwordInput === 'OmkarAdmin#2026') {
-        setCurrentMode('promoter')
-        setErrorMessage('')
-        setPasswordInput('')
+  const handleLogout = () => {
+    setSession(null);
+    setPasswordInput('');
+    setLoginError('');
+  };
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedOutletId === 7) {
+      if (passwordInput === PROMOTER_PASS) {
+        setSession({ type: 'PROMOTER', name: 'Omkar Enterprise Command Center' });
       } else {
-        setErrorMessage('Access Denied: Invalid Master Promoter Credentials.')
+        setLoginError('Invalid Administrator Access Password Token.');
       }
     } else {
-      const secureOutletKeys: { [key: number]: string } = {
-        1: 'Omk_K7x2_Plq1', 2: 'Omk_M4v9_Ztr2', 3: 'Omk_F8w1_Njk3',
-        4: 'Omk_B3c8_Xyp4', 5: 'Omk_R9t5_Dwb5', 6: 'Omk_L2s6_Mhv6',
-      }
-
-      const verifiedTargetKey = secureOutletKeys[selectedOutlet.id]
-      if (passwordInput === verifiedTargetKey) {
-        setCurrentMode('outlet')
-        setErrorMessage('')
-        setPasswordInput('')
+      const target = OUTLETS.find(o => o.id === selectedOutletId);
+      if (target && passwordInput === target.pass) {
+        setSession({ type: 'OUTLET', id: target.id, name: target.name });
       } else {
-        setErrorMessage(`Invalid Verification Key for ${selectedOutlet.name}.`)
+        setLoginError('Terminal Handshake Rejected. Check credentials.');
       }
     }
-  }
+  };
 
-  const getCalculatedItem = (itemName: string, baseStock: number, targetOutletId: number) => {
-    const totalReplenished = allReplenishments.filter(r => r.item_name === itemName && r.outlet_id === targetOutletId).reduce((a, c) => a + Number(c.quantity_added), 0)
-    const totalUsedEver = allSalesHistory.filter(s => s.item_name === itemName && s.outlet_id === targetOutletId).reduce((a, c) => a + Number(c.quantity_sold), 0)
-    
-    const usedToday = allSalesHistory.filter(s => {
-      const matchDate = new Date(s.created_at).toISOString().split('T')[0]
-      return s.item_name === itemName && s.outlet_id === targetOutletId && matchDate === liveOperatingDate
-    }).reduce((a, c) => a + Number(c.quantity_sold), 0)
+  // ==========================================
+  // 5. GLOBAL ANALYTICS RESOLVERS
+  // ==========================================
+  const getCleanMenuSales = (data: any[]) => data.filter(row => MENU_ITEMS.some(m => m.name === row.item_name));
 
-    const currentStockLeft = Number(baseStock) + totalReplenished - totalUsedEver
-    return { usedToday, currentStockLeft }
-  }
+  const calculateMetricsForSet = (filteredSales: any[]) => {
+    let revenue = 0;
+    let itemsCount = 0;
+    const itemVolMap: Record<string, number> = {};
+    const itemRevMap: Record<string, number> = {};
+    const ordersSet = new Set<string>();
 
-  // CORE COMPUTE ENGINE FOR REAL-TIME MENU LEVEL ITEM SALES & TOP PERFORMER DISCOVERIES
-  const getOutletMenuSalesBreakdownForRange = (targetOutletId: number, startDay: string, endDay: string) => {
-    let salesAmountTotal = 0
-    let transactionsLoggedCount = 0
-
-    // Initialize map counter array for explicit menu item sales counting tracking
-    const itemVolumeCountsMap: { [key: string]: number } = {}
-    menuItems.forEach(item => { itemVolumeCountsMap[item.name] = 0 })
-
-    const uniqueReceiptKeys = new Set<string>()
-    const logsFilteredInWindow = allSalesHistory.filter(s => {
-      const recordDate = s.created_at.split('T')[0]
-      return s.outlet_id === targetOutletId && recordDate >= startDay && recordDate <= endDay
-    })
-
-    logsFilteredInWindow.forEach(s => {
-      const receiptUid = `${s.created_at}_${s.outlet_id}`
-      uniqueReceiptKeys.add(receiptUid)
-      
-      if (s.item_name === 'Boxes') {
-        salesAmountTotal += (s.quantity_sold * 12)
-      }
-    })
-
-    transactionsLoggedCount = uniqueReceiptKeys.size
-
-    // Work backwards from raw material counts to reverse-engineer actual ordered menu selection items
-    // If multiple recipe tracks share ingredients, we prioritize explicit ingredient snapshot hits to avoid duplicates
-    uniqueReceiptKeys.forEach(uid => {
-      const transactionRows = logsFilteredInWindow.filter(s => `${s.created_at}_${s.outlet_id}` === uid)
-      
-      // Look over menu lists and check volume criteria mappings
-      menuItems.forEach(item => {
-        let isMatch = true
-        item.recipe.forEach(r => {
-          const matchRow = transactionRows.find(row => row.item_name === r.ingredient)
-          if (!matchRow || Number(matchRow.quantity_sold) < r.qty) {
-            isMatch = false
-          }
-        })
-        if (isMatch && transactionRows.length > 0) {
-          itemVolumeCountsMap[item.name] += 1
-        }
-      })
-    })
-
-    // Compute top performer string
-    let topItem = 'N/A'
-    let highVal = 0
-    Object.keys(itemVolumeCountsMap).forEach(key => {
-      if (itemVolumeCountsMap[key] > highVal) {
-        highVal = itemVolumeCountsMap[key]
-        topItem = key
-      }
-    })
-
-    return { 
-      salesAmountTotal, 
-      transactionsLoggedCount, 
-      itemVolumeCountsMap, 
-      topPerformerName: topItem !== 'N/A' ? `${topItem} (${highVal})` : 'None' 
-    }
-  }
-
-  const openReplenishModal = (itemName: string) => {
-    setActiveReplenishItem(itemName)
-    setNewRepQty(0)
-  }
-
-  const handleAddReplenishment = async () => {
-    if (newRepQty <= 0) return alert('Enter a valid quantity')
-    if (!selectedOutlet) return
-    const parseDayInt = new Date(liveOperatingDate).getDate()
-
-    await supabase.from('inventory_replenishments').insert({ 
-      outlet_id: selectedOutlet.id, 
-      item_name: activeReplenishItem, 
-      day_of_month: parseDayInt, 
-      quantity_added: newRepQty 
-    })
-
-    alert('Stock delivery logged successfully!')
-    setActiveReplenishItem(null)
-    syncGlobalDatabaseData(selectedOutlet.id)
-  }
-
-  const handlePunchOrder = async () => {
-    if (orderTotal === 0) return alert('Add items.')
-    if (!selectedOutlet) return
-
-    const totalNeeded: { [key: string]: number } = {}
-    menuItems.forEach(item => {
-      const orderQty = quantities[item.id] || 0
-      if (orderQty > 0) {
-        item.recipe.forEach(r => { totalNeeded[r.ingredient] = (totalNeeded[r.ingredient] || 0) + (r.qty * orderQty) })
-      }
-    })
-
-    let shortItem = ''
-    for (const inv of inventory) {
-      const { currentStockLeft } = getCalculatedItem(inv.item_name, inv.stock_on_first, selectedOutlet.id)
-      if (currentStockLeft - (totalNeeded[inv.item_name] || 0) < 0) shortItem = inv.item_name
-    }
-    if (shortItem) return alert(`Insufficient quantities for ${formatIngredientLabel(shortItem)}`)
-
-    for (const inv of inventory) {
-      const deduction = totalNeeded[inv.item_name] || 0
-      if (deduction > 0) {
-        await supabase.from('sales_history').insert({
-          outlet_id: selectedOutlet.id,
-          item_name: inv.item_name,
-          quantity_sold: deduction,
-          eggs_consumed: inv.item_name === 'Egg' ? deduction : 0,
-          created_at: new Date().toISOString()
-        })
-      }
-    }
-
-    await supabase.from('sales_history').insert({
-      outlet_id: selectedOutlet.id,
-      item_name: 'Boxes',
-      quantity_sold: quantities['i1'] || quantities['i2'] || 1,
-      created_at: new Date().toISOString()
-    })
-
-    alert('Bill Punched!');
-    setQuantities({})
-    syncGlobalDatabaseData(selectedOutlet.id)
-  }
-
-  const adjustQuantity = (id: string, amount: number) => {
-    setQuantities(prev => ({ ...prev, [id]: Math.max((prev[id] || 0) + amount, 0) }))
-  }
-  const orderTotal = menuItems.reduce((acc, item) => acc + (quantities[item.id] || 0) * item.price, 0)
-
-  const exitToGateway = () => {
-    setCurrentMode('gate')
-    setSelectedOutlet(null)
-    setPasswordInput('')
-    setErrorMessage('')
-    setQuantities({})
-  }
-
-  const generateAuditDateRangeList = (start: string, end: string) => {
-    const list: string[] = []
-    const current = new Date(start)
-    const targetEnd = new Date(end)
-    while (current <= targetEnd) {
-      list.push(current.toISOString().split('T')[0])
-      current.setDate(current.getDate() + 1)
-    }
-    return list
-  }
-
-  const auditDatesArray = generateAuditDateRangeList(auditStartDate, auditEndDate)
-  const shouldRenderIngredientColumns = auditIngredient === 'ALL' || auditOutletFilter !== 'ALL'
-  const currentRenderHeaders = shouldRenderIngredientColumns ? distinctIngredients : outlets.map(o => o.name)
-
-  const dynamicBottomTotals: { [key: string]: number } = {}
-  currentRenderHeaders.forEach(headerKey => { dynamicBottomTotals[headerKey] = 0 })
-  let spreadsheetGrandTotal = 0
-
-  // CALCULATION LOGIC FOR MASTER PROMOTER LIVE REVENUE METRICS
-  let globalPromoterTodaySalesRevenue = 0
-  outlets.forEach(o => {
-    // Falls back to direct processing for centralized promoter calculations safely
-    let revenueSum = 0
-    allSalesHistory.forEach(s => {
-      const d = s.created_at.split('T')[0]
-      if (s.outlet_id === o.id && d === liveOperatingDate && s.item_name === 'Boxes') {
-        revenueSum += (s.quantity_sold * 12)
-      }
-    })
-    globalPromoterTodaySalesRevenue += revenueSum
-  })
-
-  let globalPromoterCustomPeriodRevenue = 0
-  outlets.forEach(o => {
-    let revenueSum = 0
-    allSalesHistory.forEach(s => {
-      const d = s.created_at.split('T')[0]
-      if (s.outlet_id === o.id && d >= auditStartDate && d <= auditEndDate && s.item_name === 'Boxes') {
-        revenueSum += (s.quantity_sold * 12)
-      }
-    })
-    globalPromoterCustomPeriodRevenue += revenueSum
-  })
-
-  // EXTRACT REVERSE ENGINE COMPUTATIONS FOR LIVE TERMINAL READOUTS
-  const currentTerminalStats = selectedOutlet ? getOutletMenuSalesBreakdownForRange(selectedOutlet.id, liveOperatingDate, liveOperatingDate) : { salesAmountTotal: 0, transactionsLoggedCount: 0, topPerformerName: 'None', itemVolumeCountsMap: {} }
-  const customPeriodTerminalStats = selectedOutlet ? getOutletMenuSalesBreakdownForRange(selectedOutlet.id, outletPeriodStart, outletPeriodEnd) : { salesAmountTotal: 0, transactionsLoggedCount: 0, topPerformerName: 'None', itemVolumeCountsMap: {} }
-
-  if (currentMode === 'gate') {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-900 p-6 text-white font-sans">
-        <h1 className="mb-2 text-3xl font-extrabold text-blue-400 tracking-tight">Omkar enterprise</h1>
-        <p className="mb-8 text-slate-400 text-sm">Select systemic entry destination to initialize workspace modules</p>
+    filteredSales.forEach(row => {
+      const menuRef = MENU_ITEMS.find(m => m.name === row.item_name);
+      if (menuRef) {
+        const itemGross = menuRef.price * row.quantity_sold;
+        revenue += itemGross;
+        itemsCount += row.quantity_sold;
         
-        <div className="w-full max-w-4xl space-y-6">
-          {!selectedOutlet && passwordInput === '' ? (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {outlets.map(o => (
-                  <button key={o.id} onClick={() => setSelectedOutlet(o)} className="rounded-xl border border-slate-700 bg-slate-800 p-5 font-bold transition hover:border-blue-500 hover:bg-slate-700 text-center">
-                    <p className="text-base text-white">{o.name}</p>
-                    <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Terminal POS</span>
-                  </button>
-                ))}
-              </div>
-              <div className="border-t border-slate-800 pt-5">
-                <button onClick={() => { setSelectedOutlet(null); setPasswordInput('PROMOTER_PROMPT'); }} className="w-full rounded-xl border-2 border-dashed border-amber-500/40 bg-amber-500/10 p-4 font-black text-amber-400 text-center uppercase tracking-wider text-sm">Access Central Master Promoter Dashboard</button>
-              </div>
+        itemVolMap[row.item_name] = (itemVolMap[row.item_name] || 0) + row.quantity_sold;
+        itemRevMap[row.item_name] = (itemRevMap[row.item_name] || 0) + itemGross;
+        if (row.order_group_id) ordersSet.add(row.order_group_id);
+      }
+    });
+
+    // Find performance indicators
+    let topPerf = 'None';
+    let topVol = 0;
+    let leastPerf = 'None';
+    let leastVol = Infinity;
+
+    let highestRevItem = 'None';
+    let highestRevVal = 0;
+    let lowestRevItem = 'None';
+    let lowestRevVal = Infinity;
+
+    MENU_ITEMS.forEach(m => {
+      const v = itemVolMap[m.name] || 0;
+      const r = itemRevMap[m.name] || 0;
+
+      if (v > topVol) { topVol = v; topPerf = `${m.name} (${v} units)`; }
+      if (v > 0 && v < leastVol) { leastVol = v; leastPerf = `${m.name} (${v} units)`; }
+
+      if (r > highestRevVal) { highestRevVal = r; highestRevItem = `${m.name} (${formatCurrency(r)})`; }
+      if (r > 0 && r < lowestRevVal) { lowestRevVal = r; lowestRevItem = `${m.name} (${formatCurrency(r)})`; }
+    });
+
+    return {
+      revenue,
+      orderCount: ordersSet.size,
+      itemsCount,
+      topPerf,
+      leastPerf: leastPerf === 'None' || leastVol === Infinity ? 'None' : leastPerf,
+      highestRevItem,
+      lowestRevItem: lowestRevItem === 'None' || lowestRevVal === Infinity ? 'None' : lowestRevItem,
+      itemVolMap,
+      itemRevMap
+    };
+  };
+
+  // Live Current Day Scope Variables
+  const todayISO = getISODateOnly(new Date());
+  const todaySalesData = getCleanMenuSales(salesHistory.filter(s => getISODateOnly(new Date(s.created_at)) === todayISO));
+
+  const liveNetworkMetrics = calculateMetricsForSet(todaySalesData);
+  const liveOutletMetrics = calculateMetricsForSet(todaySalesData.filter(s => s.outlet_id === session?.id));
+
+  const filterByRange = (data: any[], from: string, to: string, outletId?: number) => {
+    return data.filter(d => {
+      const dStr = getISODateOnly(new Date(d.created_at));
+      const matchDate = dStr >= from && dStr <= to;
+      return outletId ? matchDate && d.outlet_id === outletId : matchDate;
+    });
+  };
+
+  // ==========================================
+  // VIEW INTERFACE RENDERS
+  // ==========================================
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4" style={{ fontFamily: 'monospace' }}>
+        <div className="w-full max-w-md bg-slate-900 border border-cyan-500/30 rounded-lg p-6 shadow-2xl shadow-cyan-500/10">
+          <div className="text-center mb-8">
+            <h1 className="text-2xl font-bold tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500 uppercase">
+              Omkar Enterprise Gateway
+            </h1>
+            <p className="text-xs text-slate-400 mt-2">SECURE PORTAL MANAGEMENT ACCESS NODE</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-6">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Select Access Node</label>
+              <select 
+                value={selectedOutletId} 
+                onChange={(e) => setSelectedOutletId(parseInt(e.target.value))}
+                className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500"
+              >
+                {OUTLETS.map(o => <option key={o.id} value={o.id}>{o.name} Retail Desk</option>)}
+                <option value={7}>👑 Promoter Operations Command Center</option>
+              </select>
             </div>
-          ) : (
-            <div className="mx-auto max-w-md rounded-xl bg-slate-800 p-6 border border-slate-700 text-center">
-              <h2 className="text-lg font-bold mb-1 text-white">Security Access Key Verification</h2>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Security Authorization Lock</label>
               <input 
                 type="password" 
-                placeholder="Enter Secure Password..." 
-                value={passwordInput === 'PROMOTER_PROMPT' ? '' : passwordInput} 
-                onChange={(e) => { if(passwordInput === 'PROMOTER_PROMPT') setPasswordInput(''); setPasswordInput(e.target.value); }} 
-                className="w-full mb-3 rounded-lg bg-slate-950 p-3 text-center text-sm font-mono text-white border border-slate-700 outline-none focus:border-blue-500" 
+                placeholder="••••••••" 
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500 placeholder-slate-700"
               />
-              {errorMessage && <p className="text-xs font-semibold text-red-400 mb-3">{errorMessage}</p>}
-              <div className="flex gap-2">
-                <button onClick={exitToGateway} className="w-1/2 rounded-lg bg-slate-700 py-2 text-xs font-bold text-slate-300 hover:bg-slate-600">Abort</button>
-                <button onClick={handleSystemGateUnlock} className="w-1/2 rounded-lg bg-blue-600 py-2 text-xs font-bold text-white hover:bg-blue-500">Authorize</button>
+            </div>
+
+            {loginError && <p className="text-xs text-rose-500 font-bold bg-rose-950/30 border border-rose-500/40 rounded p-2 text-center">{loginError}</p>}
+
+            <button type="submit" className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-sm font-bold uppercase py-2.5 rounded tracking-widest shadow-lg transition">
+              Establish Uplink
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // STANDARD BRANCH/OUTLET OPERATIONAL SUITE
+  if (session.type === 'OUTLET') {
+    const outletSalesRaw = salesHistory.filter(s => s.outlet_id === session.id);
+    const outletReps = replenishments.filter(r => r.outlet_id === session.id);
+
+    const computedInventory = RAW_ITEMS.map(itemName => {
+      const base = INITIAL_BASE_STOCK[itemName] || 0;
+      const sent = outletReps.filter(r => r.item_name === itemName).reduce((acc, curr) => acc + Number(curr.quantity_added), 0);
+      const used = outletSalesRaw.filter(s => s.item_name === itemName).reduce((acc, curr) => acc + Number(curr.quantity_sold), 0);
+      return { itemName, available: base + sent - used };
+    });
+
+    const rangeOutletSales = getCleanMenuSales(filterByRange(salesHistory, outletDateFrom, outletDateTo, session.id));
+    const rangeOutletMetrics = calculateMetricsForSet(rangeOutletSales);
+
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col" style={{ fontFamily: 'monospace' }}>
+        {/* OUTLET CORE HEADER */}
+        <header className="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-50">
+          <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <h2 className="text-lg font-bold tracking-wider text-slate-200 uppercase">{session.name} Live Terminal</h2>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">{getTodayDateString()}</p>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 w-full md:w-auto text-center">
+              <div className="bg-slate-950 border border-slate-800 rounded px-3 py-1.5">
+                <p className="text-[10px] text-slate-500 uppercase font-bold">Today Revenue</p>
+                <p className="text-sm font-bold text-emerald-400">{formatCurrency(liveOutletMetrics.revenue)}</p>
+              </div>
+              <div className="bg-slate-950 border border-slate-800 rounded px-3 py-1.5">
+                <p className="text-[10px] text-slate-500 uppercase font-bold">Today Top Performer</p>
+                <p className="text-sm font-bold text-amber-400 truncate max-w-[140px]">{liveOutletMetrics.topPerf.split(' (')[0]}</p>
+              </div>
+              <div className="bg-slate-950 border border-slate-800 rounded px-3 py-1.5">
+                <p className="text-[10px] text-slate-500 uppercase font-bold">Order Count</p>
+                <p className="text-sm font-bold text-cyan-400">{liveOutletMetrics.orderCount} checks</p>
+              </div>
+              <button onClick={handleLogout} className="col-span-2 sm:col-span-1 border border-rose-500/30 bg-rose-950/20 text-rose-400 hover:bg-rose-500 hover:text-white px-4 py-2 rounded text-xs font-bold uppercase transition tracking-wider self-center">
+                Logout
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {/* OUTLET TABS SELECTOR */}
+        <div className="bg-slate-900 border-b border-slate-800 px-4">
+          <div className="max-w-7xl mx-auto flex gap-1 overflow-x-auto">
+            {[
+              { id: 'MENU', label: 'Menu To Sell / Punch Order' },
+              { id: 'INVENTORY', label: 'Live Inventory Blueprint' },
+              { id: 'RECEIVED', label: 'Received Stock History' },
+              { id: 'REVENUE', label: 'Revenue & Item Breakdown' },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setOutletTab(tab.id as any)}
+                className={`px-4 py-3 text-xs font-bold tracking-wider uppercase border-b-2 whitespace-nowrap transition ${
+                  outletTab === tab.id ? 'border-cyan-500 text-cyan-400 bg-cyan-950/10' : 'border-transparent text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* OUTLET GRID WORKSPACE */}
+        <main className="flex-1 max-w-7xl w-full mx-auto p-4">
+          {outletTab === 'MENU' && (
+            <div className="space-y-6">
+              <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
+                <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest mb-4">Interactive Menu Dissection Matrix</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {MENU_ITEMS.map(item => (
+                    <div key={item.name} className="bg-slate-950 border border-slate-800 rounded p-3 flex justify-between items-center">
+                      <div>
+                        <p className="text-sm font-bold text-slate-200">{item.name}</p>
+                        <p className="text-[10px] font-bold text-slate-500 mt-0.5 tracking-wider">{item.type}</p>
+                        <p className="text-xs font-bold text-cyan-400 mt-1">{formatCurrency(item.price)}</p>
+                      </div>
+                      <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded p-1">
+                        <button 
+                          onClick={() => setOrderQuantities(p => ({ ...p, [item.name]: Math.max(0, (p[item.name] || 0) - 1) }))}
+                          className="w-7 h-7 flex items-center justify-center text-xs font-bold bg-slate-800 hover:bg-slate-700 rounded text-slate-300"
+                        >
+                          -
+                        </button>
+                        <span className="w-8 text-center text-sm font-bold text-slate-200">{orderQuantities[item.name] || 0}</span>
+                        <button 
+                          onClick={() => setOrderQuantities(p => ({ ...p, [item.name]: (p[item.name] || 0) + 1 }))}
+                          className="w-7 h-7 flex items-center justify-center text-xs font-bold bg-slate-800 hover:bg-slate-700 rounded text-slate-300"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <button 
+                  onClick={handlePunchOrder}
+                  disabled={orderLoading}
+                  className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold tracking-widest text-sm uppercase px-8 py-3 rounded-lg shadow-xl transition disabled:opacity-50"
+                >
+                  {orderLoading ? 'TRANSMITTING ORDER...' : '⚡ Punch Order Check'}
+                </button>
               </div>
             </div>
           )}
-        </div>
+
+          {outletTab === 'INVENTORY' && (
+            <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 overflow-hidden">
+              <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest mb-4">View-Only Fluid Material Stock Balanced Logs</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400 font-bold bg-slate-950/40">
+                      <th className="p-3">Raw Material Item Variant</th>
+                      <th className="p-3">Calculation Mechanics Formula</th>
+                      <th className="p-3 text-right">Available Stock Balance</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800 text-sm">
+                    {computedInventory.map(row => (
+                      <tr key={row.itemName} className="hover:bg-slate-950/20">
+                        <td className="p-3 font-bold text-slate-300">{row.itemName}</td>
+                        <td className="p-3 text-xs text-slate-500">Initial Base Stock + Dispatched Supplies (From Promoter Dashboard) - Ingredient Usage Log</td>
+                        <td className={`p-3 text-right font-bold ${row.available < 50 ? 'text-rose-400 animate-pulse' : 'text-emerald-400'}`}>
+                          {row.available.toLocaleString()} units
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {outletTab === 'RECEIVED' && (
+            <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
+              <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest mb-4">Automated Received Stock Supply History Ledger</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400 font-bold bg-slate-950/40">
+                      <th className="p-3">Date / Timestamp Log</th>
+                      <th className="p-3">Item Variant Name</th>
+                      <th className="p-3 text-right">Volume Dispatched Received</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800 text-sm">
+                    {outletReps.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="p-4 text-center text-xs text-slate-500">No incoming supply dispatches recorded from the Promoter yet.</td>
+                      </tr>
+                    ) : (
+                      [...outletReps].reverse().map(rep => (
+                        <tr key={rep.id} className="hover:bg-slate-950/20">
+                          <td className="p-3 text-xs text-slate-400">{new Date(rep.created_at).toLocaleString()}</td>
+                          <td className="p-3 font-bold text-slate-300">{rep.item_name}</td>
+                          <td className="p-3 text-right font-bold text-cyan-400">+{rep.quantity_added} units</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {outletTab === 'REVENUE' && (
+            <div className="space-y-6">
+              <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest">Custom Date Boundaries Scope</h3>
+                  <p className="text-[11px] text-slate-500 mt-1">Recalculates financials and volumes independently for this period</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input type="date" value={outletDateFrom} onChange={(e) => setOutletDateFrom(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-slate-300 focus:outline-none"/>
+                  <span className="text-xs text-slate-500 font-bold">TO</span>
+                  <input type="date" value={outletDateTo} onChange={(e) => setOutletDateTo(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-slate-300 focus:outline-none"/>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 text-center">
+                  <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">Period Total Revenue</p>
+                  <p className="text-2xl font-bold text-emerald-400">{formatCurrency(rangeOutletMetrics.revenue)}</p>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 text-center">
+                  <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">🏆 Top Performer For Selected Period</p>
+                  <p className="text-sm font-bold text-amber-400 mt-2">{rangeOutletMetrics.topPerf}</p>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 text-center">
+                  <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">Period Order Volume Count</p>
+                  <p className="text-2xl font-bold text-cyan-400">{rangeOutletMetrics.orderCount} checks</p>
+                </div>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
+                <h4 className="text-xs font-bold uppercase text-slate-400 tracking-widest mb-4">Itemized Sales Dissection Sheet</h4>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400 font-bold bg-slate-950/40">
+                        <th className="p-3">Product Menu Variant</th>
+                        <th className="p-3">Structure Classification</th>
+                        <th className="p-3">Price Tag</th>
+                        <th className="p-3 text-center">Units Sold Volume</th>
+                        <th className="p-3 text-right">Total Earned Gross Cash</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800 text-sm">
+                      {MENU_ITEMS.map(item => {
+                        const volume = rangeOutletMetrics.itemVolMap[item.name] || 0;
+                        const totalGross = rangeOutletMetrics.itemRevMap[item.name] || 0;
+                        return (
+                          <tr key={item.name} className="hover:bg-slate-950/20">
+                            <td className="p-3 font-bold text-slate-300">{item.name}</td>
+                            <td className="p-3 text-xs text-slate-500 font-bold tracking-wider">{item.type}</td>
+                            <td className="p-3 text-xs text-slate-400 font-bold">{formatCurrency(item.price)}</td>
+                            <td className="p-3 text-center text-slate-200 font-bold">{volume} units</td>
+                            <td className="p-3 text-right font-bold text-emerald-400">{formatCurrency(totalGross)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </main>
       </div>
-    )
+    );
   }
 
-  if (currentMode === 'outlet' && selectedOutlet) {
+  // OMKAR ENTERPRISE MASTER NETWORK PROMOTER COMMAND CENTRE
+  if (session.type === 'PROMOTER') {
+    const rangeNetworkSales = getCleanMenuSales(filterByRange(salesHistory, promoterDateFrom, promoterDateTo));
+    const rangeNetworkMetrics = calculateMetricsForSet(rangeNetworkSales);
+
     return (
-      <main className="min-h-screen bg-slate-950 p-6 font-sans text-slate-100 relative">
-        <header className="mb-6 flex flex-col lg:flex-row justify-between items-start lg:items-center border-b border-slate-800 pb-5 gap-4">
-          <div>
-            <h1 className="text-2xl font-black">{selectedOutlet.name} Live Terminal</h1>
-            <div className="flex items-center gap-2 mt-2">
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Operating Calendar Date:</span>
-              <div className="bg-slate-900 border border-slate-800 px-3 py-1 rounded text-xs font-black text-blue-400 font-mono shadow-inner">
-                {new Date(liveOperatingDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col" style={{ fontFamily: 'monospace' }}>
+        {/* PROMOTER MAIN HEADER HUB */}
+        <header className="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-50">
+          <div className="max-w-7xl mx-auto flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+            <div>
+              <h1 className="text-lg font-bold tracking-widest text-orange-500 uppercase flex items-center gap-2">
+                👑 Omkar Enterprise Command Dashboard
+              </h1>
+              <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mt-0.5">GLOBAL REAL-TIME INTEGRATED NETWORK HUB</p>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full lg:w-auto text-center">
+              <div className="bg-slate-950 border border-slate-800 rounded px-3 py-1.5">
+                <p className="text-[9px] text-slate-500 uppercase font-bold">Today Revenue (All 6)</p>
+                <p className="text-sm font-bold text-emerald-400">{formatCurrency(liveNetworkMetrics.revenue)}</p>
               </div>
-            </div>
-          </div>
-
-          {/* TASKS 1 & 2: REPLACED ORDERS COUNT WITH LIVE COUNTING TOP PERFORMER COMPONENT */}
-          <div className="flex flex-wrap gap-3 w-full lg:w-auto">
-            <div className="bg-slate-900 border border-slate-800 px-4 py-2 rounded-xl shadow-md min-w-[130px]">
-              <span className="text-[10px] uppercase font-bold text-slate-500 block tracking-wider">Today's Revenue</span>
-              <span className="text-xl font-black text-emerald-400 font-mono">${currentTerminalStats.salesAmountTotal.toLocaleString()}</span>
-            </div>
-            <div className="bg-slate-900 border border-slate-800 px-4 py-2 rounded-xl shadow-md min-w-[140px]">
-              <span className="text-[10px] uppercase font-bold text-amber-500 block tracking-wider">★ Top Performer</span>
-              <span className="text-sm font-black text-white block mt-1 truncate max-w-[150px]" title={currentTerminalStats.topPerformerName}>
-                {currentTerminalStats.topPerformerName}
-              </span>
-            </div>
-            <button onClick={exitToGateway} className="rounded-xl bg-slate-900 border border-slate-800 px-5 text-xs font-bold text-slate-400 hover:bg-red-950 hover:text-white hover:border-red-900 transition ml-auto lg:ml-0">Log Out</button>
-          </div>
-        </header>
-
-        {/* TASK 4: 4-TAB NAVIGATION CONTROLLER ROW */}
-        <div className="flex flex-wrap gap-2 border-b border-slate-800 mb-6 pb-1">
-          <button onClick={() => setOutletActiveTab('menu')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition border-t-2 ${outletActiveTab === 'menu' ? 'bg-slate-900 text-blue-400 border-blue-500' : 'text-slate-500 border-transparent hover:text-slate-300'}`}>🛍️ Menu Products</button>
-          <button onClick={() => setOutletActiveTab('inventory')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition border-t-2 ${outletActiveTab === 'inventory' ? 'bg-slate-900 text-emerald-400 border-emerald-500' : 'text-slate-500 border-transparent hover:text-slate-300'}`}>📋 Live Inventory Blueprint</button>
-          <button onClick={() => setOutletActiveTab('replenishments')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition border-t-2 ${outletActiveTab === 'replenishments' ? 'bg-slate-900 text-purple-400 border-purple-500' : 'text-slate-500 border-transparent hover:text-slate-300'}`}>🚚 Received Stock History</button>
-          <button onClick={() => setOutletActiveTab('history')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition border-t-2 ${outletActiveTab === 'history' ? 'bg-slate-900 text-amber-400 border-amber-500' : 'text-slate-500 border-transparent hover:text-slate-300'}`}>🔍 Sales History Lookup</button>
-        </div>
-
-        {/* TAB 1: MENU PRODUCTS SECTION */}
-        {outletActiveTab === 'menu' && (
-          <section className="rounded-2xl bg-slate-900 p-6 border border-slate-800 animate-fadeIn">
-            <h2 className="mb-4 text-xs font-bold text-blue-400 uppercase tracking-widest">Menu Products Panel</h2>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {menuItems.map(item => (
-                <div key={item.id} className="flex items-center justify-between rounded-xl bg-slate-950 p-4 border border-slate-800">
-                  <div>
-                    <h3 className="font-bold text-xs">{item.name}</h3>
-                    <p className="text-[10px] text-slate-500">${item.price.toFixed(2)}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => adjustQuantity(item.id, -1)} className="h-7 w-7 rounded bg-slate-800 text-sm font-bold">-</button>
-                    <span className="w-4 text-center font-mono text-xs">{quantities[item.id] || 0}</span>
-                    <button onClick={() => adjustQuantity(item.id, 1)} className="h-7 w-7 rounded bg-slate-800 text-sm font-bold">+</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-6 flex justify-between items-center bg-slate-950 p-4 rounded-xl border border-slate-800 max-w-xl">
-              <div>
-                <span className="text-[10px] uppercase tracking-wider text-slate-500">Total Order Bill</span>
-                <p className="text-2xl font-black text-white">${orderTotal.toFixed(2)}</p>
+              <div className="bg-slate-950 border border-slate-800 rounded px-3 py-1.5">
+                <p className="text-[9px] text-slate-500 uppercase font-bold">Top Performer Today</p>
+                <p className="text-sm font-bold text-amber-400 truncate max-w-[140px]">{liveNetworkMetrics.topPerf.split(' (')[0]}</p>
               </div>
-              <button onClick={handlePunchOrder} className="rounded-lg bg-blue-600 px-6 py-3 text-xs font-bold text-white hover:bg-blue-500">Punch Order Check</button>
-            </div>
-          </section>
-        )}
-
-        {/* TAB 2: LIVE INVENTORY BLUEPRINT (TASK 1: REMOVED RECEIVE COLUMN & LOGIC) */}
-        {outletActiveTab === 'inventory' && (
-          <section className="rounded-2xl bg-slate-900 p-6 border border-slate-800 animate-fadeIn">
-            <h2 className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-4">Live Inventory Analytics Grid</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left font-mono text-xs min-w-[500px]">
-                <thead>
-                  <tr className="border-b border-slate-800 text-slate-500 font-bold">
-                    <th className="pb-2">Material SKU</th>
-                    <th className="pb-2 text-center">Stock 1st</th>
-                    <th className="pb-2 text-center text-amber-400">Used Today</th>
-                    <th className="pb-2 text-right text-emerald-400">Stock Left Available</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {inventory.map(inv => {
-                    const { usedToday, currentStockLeft } = getCalculatedItem(inv.item_name, inv.stock_on_first, selectedOutlet.id)
-                    return (
-                      <tr key={inv.id} className="border-b border-slate-800/50">
-                        <td className="py-3 font-sans font-bold text-white">{formatIngredientLabel(inv.item_name)}</td>
-                        <td className="py-3 text-center text-slate-400">{inv.stock_on_first}</td>
-                        <td className="py-3 text-center text-amber-500 font-bold">{usedToday}</td>
-                        <td className="py-3 text-right text-emerald-400 font-bold text-sm">{currentStockLeft}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
-
-        {/* TAB 3: RECEIVED STOCK HISTORY LEDGER */}
-        {outletActiveTab === 'replenishments' && (
-          <section className="rounded-2xl bg-slate-900 p-6 border border-slate-800 animate-fadeIn">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xs font-bold text-purple-400 uppercase tracking-widest">Received Stock History Ledger</h2>
-              <button onClick={() => openReplenishModal(distinctIngredients[0])} className="rounded-lg bg-purple-600/20 text-purple-400 border border-purple-500/30 px-3 py-1 text-xs font-bold hover:bg-purple-600 hover:text-white transition">
-                + Log Material Supply Entry
+              <div className="bg-slate-950 border border-slate-800 rounded px-3 py-1.5">
+                <p className="text-[9px] text-slate-500 uppercase font-bold">Order Count (All 6)</p>
+                <p className="text-sm font-bold text-cyan-400">{liveNetworkMetrics.orderCount} checks</p>
+              </div>
+              <button onClick={handleLogout} className="border border-rose-500/30 bg-rose-950/20 text-rose-400 hover:bg-rose-500 hover:text-white px-4 py-1.5 rounded text-xs font-bold uppercase transition tracking-wider self-center">
+                Logout
               </button>
             </div>
-            <div className="max-h-96 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 divide-y divide-slate-800">
-              {allReplenishments.length === 0 ? (
-                <p className="p-4 text-center text-xs font-mono text-slate-600 italic">No incoming deliveries logged yet in the master table.</p>
-              ) : (
-                allReplenishments.map(log => (
-                  <div key={log.id} className="flex justify-between items-center p-4 font-mono text-xs">
-                    <div>
-                      <span className="font-bold text-white bg-slate-900 px-2 py-1 rounded mr-2 uppercase text-[10px] border border-slate-800">
-                        {formatIngredientLabel(log.item_name)}
-                      </span>
-                      <span className="text-slate-400 text-[10px] font-sans">Day Check Index: {log.day_of_month}th</span>
-                    </div>
-                    <span className="text-emerald-400 font-black text-sm">+{log.quantity_added} units</span>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* TAB 4: OUTLET SALES HISTORY LOOKUP (TASK 3: FULL MENU LIST & TOP PERFORMER INCLUSION) */}
-        {outletActiveTab === 'history' && (
-          <section className="rounded-2xl bg-slate-900 p-6 border border-slate-800 space-y-6 animate-fadeIn">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-4 gap-4">
-              <div>
-                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200">Outlet Range Performance Auditor</h3>
-                <p className="text-[10px] text-slate-500 font-sans mt-0.5">Filter and review metrics compiled dynamically inside chosen window timelines</p>
-              </div>
-              
-              <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 p-2 rounded-xl font-mono text-xs">
-                <input type="date" value={outletPeriodStart} onChange={(e) => setOutletPeriodStart(e.target.value)} className="bg-slate-900 border border-slate-700 text-white rounded px-2 py-1 focus:outline-none" />
-                <span className="text-slate-500 text-xs font-sans">to</span>
-                <input type="date" value={outletPeriodEnd} onChange={(e) => setOutletPeriodEnd(e.target.value)} className="bg-slate-900 border border-slate-700 text-white rounded px-2 py-1 focus:outline-none" />
-              </div>
-            </div>
-
-            {/* EXPANDED KPIS CONTROLLER ROW GRID */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl text-center">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Window Sales Gross</span>
-                <span className="text-xl font-black text-emerald-400 font-mono block mt-1">${customPeriodTerminalStats.salesAmountTotal.toLocaleString()}</span>
-              </div>
-              <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl text-center">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Window Orders Count</span>
-                <span className="text-xl font-black text-blue-400 font-mono block mt-1">{customPeriodTerminalStats.transactionsLoggedCount} orders</span>
-              </div>
-              <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl text-center sm:col-span-2 lg:col-span-2">
-                <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest block">★ Window Top Performer</span>
-                <span className="text-lg font-black text-white font-mono block mt-1 truncate">{customPeriodTerminalStats.topPerformerName}</span>
-              </div>
-            </div>
-
-            {/* TASK 3: COMPOSITE DETAILED ITEM SELECTION COUNTER BREAKDOWN MATRIX */}
-            <div className="bg-slate-950 border border-slate-800 rounded-xl p-4">
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Itemized Product Volume Ledger (Chosen Window)</h4>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                {menuItems.map(item => {
-                  const itemsSoldInPeriodCount = customPeriodTerminalStats.itemVolumeCountsMap[item.name] || 0
-                  return (
-                    <div key={item.id} className="bg-slate-900/50 border border-slate-800 p-3 rounded-lg flex flex-col justify-between">
-                      <span className="text-[11px] font-bold text-slate-300 truncate block">{item.name}</span>
-                      <div className="flex items-baseline gap-1 mt-2">
-                        <span className="text-base font-black text-white font-mono">{itemsSoldInPeriodCount}</span>
-                        <span className="text-[9px] text-slate-500 uppercase">sold</span>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* MODAL CONTROLLER FOR INCOMING DELIVERIES PORTAL */}
-        {activeReplenishItem && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-            <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
-              <h3 className="text-sm font-bold text-white mb-1">Receive Stock:</h3>
-              <select value={activeReplenishItem} onChange={(e) => setActiveReplenishItem(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded p-2 mb-3 text-sm font-mono outline-none">
-                {distinctIngredients.map(ing => (
-                  <option key={ing} value={ing}>{formatIngredientLabel(ing)}</option>
-                ))}
-              </select>
-              <p className="text-[10px] text-slate-400 uppercase font-mono tracking-tight mb-4">Logging units into {selectedOutlet.name} inventory database registries</p>
-              <input type="number" placeholder="Enter exact received amount" value={newRepQty || ''} onChange={(e) => setNewRepQty(Number(e.target.value))} className="w-full rounded bg-slate-950 text-sm p-3 text-emerald-400 border border-slate-700 font-bold outline-none focus:border-emerald-500" />
-              <div className="flex gap-2 mt-5 text-xs font-bold">
-                <button onClick={() => setActiveReplenishItem(null)} className="w-1/2 bg-slate-800 py-2.5 rounded-lg text-slate-300 transition">Cancel</button>
-                <button onClick={handleAddReplenishment} className="w-1/2 bg-emerald-600 py-2.5 rounded-lg text-white transition hover:bg-emerald-500">Confirm Received Stock</button>
-              </div>
-            </div>
-          </div>
-        )}
-      </main>
-    )
-  }
-
-  return (
-    <main className="min-h-screen bg-slate-950 p-6 font-sans text-slate-100 space-y-6">
-      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-5 gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-amber-400 tracking-tight">👑 Omkar enterprise Command Dashboard</h1>
-          <p className="text-[10px] text-slate-400 font-mono mt-0.5 uppercase tracking-widest">Cross-Branch Analytics & Inventory Control Console</p>
-        </div>
-        <button onClick={exitToGateway} className="rounded-lg bg-slate-850 px-4 py-2 text-xs font-bold text-slate-300 hover:bg-red-900 hover:text-white transition">Exit Portal</button>
-      </header>
-
-      {/* PROMOTER REAL-TIME REVENUE SUMMARY METRIC DISPLAY WIDGETS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-slate-900 border border-slate-800/80 p-5 rounded-2xl shadow-lg relative overflow-hidden group">
-          <span className="text-[10px] uppercase tracking-widest font-extrabold text-slate-500 block">Network-Wide Today Sales</span>
-          <span className="text-3xl font-black text-emerald-400 tracking-tight font-mono block mt-1">${globalPromoterTodaySalesRevenue.toLocaleString()}</span>
-          <p className="text-[10px] text-slate-600 font-sans mt-1">Live synchronized summary across all combined outlets since midnight</p>
-        </div>
-        <div className="bg-slate-900 border border-slate-800/80 p-5 rounded-2xl shadow-lg relative overflow-hidden group">
-          <span className="text-[10px] uppercase tracking-widest font-extrabold text-slate-500 block">Network Selected Range Sales</span>
-          <span className="text-3xl font-black text-blue-400 tracking-tight font-mono block mt-1">${globalPromoterCustomPeriodRevenue.toLocaleString()}</span>
-          <p className="text-[10px] text-slate-600 font-sans mt-1">Computed dynamic revenue total within chosen audit dates below</p>
-        </div>
-      </div>
-
-      <div className="flex gap-2 border-b border-slate-800 pb-1">
-        <button onClick={() => setPromoterActiveTab('consumption')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition border-t-2 ${promoterActiveTab === 'consumption' ? 'bg-slate-900 text-blue-400 border-blue-500' : 'text-slate-500 border-transparent hover:text-slate-300'}`}>📊 Consumption Records (Stock Out)</button>
-        <button onClick={() => setPromoterActiveTab('dispatches')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition border-t-2 ${promoterActiveTab === 'dispatches' ? 'bg-slate-900 text-emerald-400 border-emerald-500' : 'text-slate-500 border-transparent hover:text-slate-300'}`}>🚚 Sent Stock Ledger (Stock In)</button>
-      </div>
-
-      <section className="rounded-2xl bg-slate-900 border border-slate-800 p-6 shadow-xl space-y-4">
-        <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 pb-3 border-b border-slate-800">
-          <div>
-            <h2 className="text-sm font-bold text-slate-200 uppercase tracking-widest">{promoterActiveTab === 'consumption' ? 'Custom Material Consumption Auditor' : 'Master Dispatch Distribution Balance Sheet'}</h2>
-            <p className="text-[10px] text-slate-500 mt-0.5">{promoterActiveTab === 'consumption' ? 'Auditing raw sales volumes subtracted during client orders' : 'Auditing stock drop quantities sent to active locations'}</p>
-          </div>
-          
-          <div className="flex flex-wrap items-center gap-4 bg-slate-950 p-3 rounded-xl border border-slate-800">
-            <div className="flex items-center gap-1.5 text-xs">
-              <span className="text-slate-500 uppercase tracking-wider font-bold text-[10px]">Outlet Target:</span>
-              <select value={auditOutletFilter} onChange={(e) => setAuditOutletFilter(e.target.value)} className="bg-slate-900 border border-slate-700 text-emerald-400 rounded px-2 py-1 font-bold font-mono outline-none">
-                <option value="ALL">All Outlets Combined</option>
-                {outlets.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-              </select>
-            </div>
-
-            <div className="flex items-center gap-1.5 text-xs">
-              <span className="text-slate-500 uppercase tracking-wider font-bold text-[10px]">Ingredient:</span>
-              <select value={auditIngredient} onChange={(e) => setAuditIngredient(e.target.value)} className="bg-slate-900 border border-slate-700 text-amber-400 rounded px-2 py-1 font-bold font-mono outline-none">
-                <option value="ALL">All Ingredients</option>
-                {distinctIngredients.map(ing => <option key={ing} value={ing}>{formatIngredientLabel(ing)}</option>)}
-              </select>
-            </div>
-            
-            <div className="flex items-center gap-1.5 text-xs font-mono">
-              <span className="text-slate-500 uppercase tracking-wider font-bold text-[10px] font-sans">From:</span>
-              <input type="date" value={auditStartDate} onChange={(e) => setAuditStartDate(e.target.value)} className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white outline-none text-xs" />
-              <span className="text-slate-500 uppercase tracking-wider font-bold text-[10px] font-sans">To:</span>
-              <input type="date" value={auditEndDate} onChange={(e) => setAuditEndDate(e.target.value)} className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white outline-none text-xs" />
-            </div>
           </div>
         </header>
 
-        <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950">
-          <table className="w-full text-left border-collapse font-mono text-xs">
-            <thead>
-              <tr className="border-b border-slate-800 bg-slate-900 text-slate-400 font-bold uppercase tracking-wider text-center">
-                <th className="py-3 px-3 text-left w-32 bg-slate-900 sticky left-0 z-10 border-r border-slate-800">Timeline Date</th>
-                {currentRenderHeaders.map(colHeader => (
-                  <th key={colHeader} className="py-3 px-2">{formatIngredientLabel(colHeader)}</th>
-                ))}
-                <th className="py-3 px-3 bg-blue-950/40 text-blue-400 border-l border-slate-800">Period Total</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/60 text-center">
-              {auditDatesArray.map(dateString => {
-                let dailyRowRunningSum = 0
-                const loopDayInteger = new Date(dateString).getDate()
-
-                return (
-                  <tr key={dateString} className="hover:bg-slate-900/40 transition">
-                    <td className="py-2.5 px-3 text-left font-bold text-slate-400 bg-slate-950 sticky left-0 z-10 border-r border-slate-800 font-sans text-xs">{dateString}</td>
-                    {currentRenderHeaders.map(colHeader => {
-                      let computedValue = 0
-
-                      if (promoterActiveTab === 'consumption') {
-                        if (shouldRenderIngredientColumns) {
-                          const targetIngName = colHeader
-                          computedValue = allSalesHistory.filter(s => {
-                            const recDayStr = s.created_at.split('T')[0]
-                            const matchesOutlet = auditOutletFilter === 'ALL' || s.outlet_id === Number(auditOutletFilter)
-                            return s.item_name === targetIngName && matchesOutlet && recDayStr === dateString
-                          }).reduce((a, c) => a + Number(c.quantity_sold), 0)
-                        } else {
-                          const targetOutletId = outlets.find(o => o.name === colHeader)?.id || 0
-                          computedValue = allSalesHistory.filter(s => {
-                            const recDayStr = s.created_at.split('T')[0]
-                            return s.item_name === auditIngredient && s.outlet_id === targetOutletId && recDayStr === dateString
-                          }).reduce((a, c) => a + Number(c.quantity_sold), 0)
-                        }
-                      } else {
-                        if (shouldRenderIngredientColumns) {
-                          const targetIngName = colHeader
-                          computedValue = allReplenishments.filter(r => {
-                            const matchesOutlet = auditOutletFilter === 'ALL' || r.outlet_id === Number(auditOutletFilter)
-                            return r.item_name === targetIngName && r.day_of_month === loopDayInteger && matchesOutlet
-                          }).reduce((a, c) => a + Number(c.quantity_added), 0)
-                        } else {
-                          const targetOutletId = outlets.find(o => o.name === colHeader)?.id || 0
-                          computedValue = allReplenishments.filter(r => {
-                            return r.item_name === auditIngredient && r.outlet_id === targetOutletId && r.day_of_month === loopDayInteger
-                          }).reduce((a, c) => a + Number(c.quantity_added), 0)
-                        }
-                      }
-
-                      dailyRowRunningSum += computedValue
-                      dynamicBottomTotals[colHeader] += computedValue
-
-                      return (
-                        <td key={colHeader} className={`py-2.5 px-2 font-bold ${computedValue > 0 ? (promoterActiveTab === 'consumption' ? 'text-amber-500' : 'text-emerald-400 font-black text-sm') : 'text-slate-700'}`}>{computedValue || '-'}</td>
-                      )
-                    })}
-                    <td className="py-2.5 px-3 bg-blue-950/40 text-blue-400 font-bold text-right border-l border-slate-800">
-                      {dailyRowRunningSum.toLocaleString()}
-                    </td>
-                  </tr>
-                )
-              })}
-              <tr className="border-t-2 border-slate-700 bg-slate-900 font-sans text-xs font-black text-center text-white shadow-inner">
-                <td className="py-3.5 px-3 text-left bg-slate-900 font-extrabold text-blue-400 uppercase tracking-wider sticky left-0 z-10 border-r border-slate-800">Total Sum</td>
-                {currentRenderHeaders.map(colHeader => {
-                  const verticalTotal = dynamicBottomTotals[colHeader]
-                  spreadsheetGrandTotal += verticalTotal
-                  return <td key={colHeader} className={`py-3.5 px-2 font-mono text-sm tracking-tight ${verticalTotal > 0 ? 'text-emerald-400 font-black' : 'text-slate-500'}`}>{verticalTotal || 0}</td>
-                })}
-                <td className="py-3.5 px-3 bg-emerald-950/40 border-l border-slate-800 font-mono text-base text-emerald-400 font-black">{spreadsheetGrandTotal.toLocaleString()}</td>
-              </tr>
-            </tbody>
-          </table>
+        {/* PROMOTER INTERFACE TABS LAYER */}
+        <div className="bg-slate-900 border-b border-slate-800 px-4">
+          <div className="max-w-7xl mx-auto flex gap-1 overflow-x-auto">
+            {[
+              { id: 'OVERVIEW', label: '📊 Network Overview' },
+              { id: 'BRANCH_ITEMS', label: '📦 Branch-by-Branch Matrix (Items)' },
+              { id: 'BRANCH_REVENUE', label: '💰 Revenue Matrix (Financials)' },
+              { id: 'STOCK_DISPATCH', label: '🚀 Stock Dispatched' },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setPromoterTab(tab.id as any)}
+                className={`px-4 py-3 text-xs font-bold tracking-wider uppercase border-b-2 whitespace-nowrap transition ${
+                  promoterTab === tab.id ? 'border-orange-500 text-orange-400 bg-orange-950/10' : 'border-transparent text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </section>
-    </main>
-  )
+
+        {/* MASTER SPREADSHEET MONITOR DESK */}
+        <main className="flex-1 max-w-7xl w-full mx-auto p-4 space-y-6">
+          
+          {/* LOGISTICAL FILTER WINDOW PANEL */}
+          {promoterTab !== 'STOCK_DISPATCH' && (
+            <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest">Network Analytics Audit Filter</h3>
+                <p className="text-[11px] text-slate-500 mt-1">Controls calculations across global network sheets simultaneously</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <input type="date" value={promoterDateFrom} onChange={(e) => setPromoterDateFrom(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-slate-300 focus:outline-none"/>
+                <span className="text-xs text-slate-500 font-bold">TO</span>
+                <input type="date" value={promoterDateTo} onChange={(e) => setPromoterDateTo(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-slate-300 focus:outline-none"/>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 1: SPREADSHEET NETWORK OVERVIEW */}
+          {promoterTab === 'OVERVIEW' && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 text-center">
+                  <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">Combined Period Network Revenue</p>
+                  <p className="text-2xl font-bold text-emerald-400">{formatCurrency(rangeNetworkMetrics.revenue)}</p>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 text-center">
+                  <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">Combined Period Network Orders</p>
+                  <p className="text-2xl font-bold text-cyan-400">{rangeNetworkMetrics.orderCount} checks done</p>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 text-center">
+                  <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">Combined Period Network Units Sold</p>
+                  <p className="text-2xl font-bold text-orange-400">{rangeNetworkMetrics.itemsCount} units</p>
+                </div>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
+                <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest mb-4">Global Menu & Combo Dissection Matrix</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400 font-bold bg-slate-950/40">
+                        <th className="p-3">Product Menu Variant</th>
+                        <th className="p-3">Structure Classification</th>
+                        <th className="p-3">Price Tag</th>
+                        <th className="p-3 text-center">Network Combined Sales Volume</th>
+                        <th className="p-3 text-right">Network Total Earned Gross</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800 text-sm">
+                      {MENU_ITEMS.map(item => {
+                        const volume = rangeNetworkMetrics.itemVolMap[item.name] || 0;
+                        const totalGross = rangeNetworkMetrics.itemRevMap[item.name] || 0;
+                        return (
+                          <tr key={item.name} className="hover:bg-slate-950/20">
+                            <td className="p-3 font-bold text-slate-300">{item.name}</td>
+                            <td className="p-3 text-xs text-slate-500 font-bold tracking-wider">{item.type}</td>
+                            <td className="p-3 text-xs text-slate-400 font-bold">{formatCurrency(item.price)}</td>
+                            <td className="p-3 text-center text-slate-200 font-bold">{volume} units</td>
+                            <td className="p-3 text-right font-bold text-emerald-400">{formatCurrency(totalGross)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: BRANCH BY BRANCH METRIX FOR ITEMS VOLUME */}
+          {promoterTab === 'BRANCH_ITEMS' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {OUTLETS.map(outlet => {
+                const outletSales = getCleanMenuSales(filterByRange(salesHistory, promoterDateFrom, promoterDateTo, outlet.id));
+                const metrics = calculateMetricsForSet(outletSales);
+                return (
+                  <div key={outlet.id} className="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col justify-between">
+                    <div>
+                      <div className="border-b border-slate-800 pb-2 mb-3 flex justify-between items-center">
+                        <h3 className="text-sm font-bold text-slate-200 uppercase">{outlet.name} Item Quantities</h3>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-cyan-400">{metrics.orderCount} checks</span>
+                      </div>
+                      
+                      {/* TOP AND LEAST QUANTITY HIGH-LEVEL READOUTS */}
+                      <div className="bg-slate-950 border border-slate-800/60 rounded p-2 mb-3 space-y-1 text-[11px]">
+                        <p className="text-slate-400 font-bold truncate">🏆 Top Volume: <span className="text-amber-400">{metrics.topPerf}</span></p>
+                        <p className="text-slate-400 font-bold truncate">📉 Least Volume: <span className="text-rose-400">{metrics.leastPerf}</span></p>
+                      </div>
+
+                      <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
+                        {MENU_ITEMS.map(item => (
+                          <div key={item.name} className="flex justify-between items-center text-xs bg-slate-950/40 p-1.5 border border-slate-800/40 rounded">
+                            <span className="text-slate-400">{item.name}</span>
+                            <span className="font-bold text-slate-200">{metrics.itemVolMap[item.name] || 0} units</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* TAB 3: BRANCH BY BRANCH METRIX FOR FINANCIAL REVENUE */}
+          {promoterTab === 'BRANCH_REVENUE' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {OUTLETS.map(outlet => {
+                const outletSales = getCleanMenuSales(filterByRange(salesHistory, promoterDateFrom, promoterDateTo, outlet.id));
+                const metrics = calculateMetricsForSet(outletSales);
+                return (
+                  <div key={outlet.id} className="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col justify-between">
+                    <div>
+                      <div className="border-b border-slate-800 pb-2 mb-3 flex justify-between items-center">
+                        <h3 className="text-sm font-bold text-emerald-400 uppercase">{outlet.name} Revenue Matrix</h3>
+                        <span className="text-sm font-bold text-emerald-400">{formatCurrency(metrics.revenue)}</span>
+                      </div>
+
+                      {/* HIGHEST AND LOWEST FINANCIAL WINNERS READOUTS */}
+                      <div className="bg-slate-950 border border-slate-800/60 rounded p-2 mb-3 space-y-1 text-[11px]">
+                        <p className="text-slate-400 font-bold truncate">💰 Highest Cash: <span className="text-emerald-400">{metrics.highestRevItem}</span></p>
+                        <p className="text-slate-400 font-bold truncate">📉 Lowest Cash: <span className="text-rose-400">{metrics.lowestRevItem}</span></p>
+                      </div>
+
+                      <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
+                        {MENU_ITEMS.map(item => (
+                          <div key={item.name} className="flex justify-between items-center text-xs bg-slate-950/40 p-1.5 border border-slate-800/40 rounded">
+                            <span className="text-slate-400">{item.name}</span>
+                            <span className="font-bold text-emerald-400">{formatCurrency(metrics.itemRevMap[item.name] || 0)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* TAB 4: CENTRAL MATERIAL SUPPLY DISPATCH OPERATIONS CONTROL */}
+          {promoterTab === 'STOCK_DISPATCH' && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* DISPATCH INPUT CONTROL STATION */}
+              <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 h-fit">
+                <h3 className="text-xs font-bold uppercase text-orange-400 tracking-widest mb-4">Material Supply Dispatch Desk</h3>
+                <form onSubmit={handleDispatchStock} className="space-y-4">
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Target Destination Link</label>
+                    <select 
+                      value={dispatchOutlet} 
+                      onChange={(e) => setDispatchOutlet(parseInt(e.target.value))}
+                      className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-xs text-slate-200 focus:outline-none focus:border-orange-500"
+                    >
+                      {OUTLETS.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Raw Material Selection</label>
+                    <select 
+                      value={dispatchItem} 
+                      onChange={(e) => setDispatchItem(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-xs text-slate-200 focus:outline-none focus:border-orange-500"
+                    >
+                      {RAW_ITEMS.map(item => <option key={item} value={item}>{item}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Quantitative Dispatch Amount</label>
+                    <input 
+                      type="number" 
+                      placeholder="Enter mass units" 
+                      value={dispatchQty}
+                      onChange={(e) => setDispatchQty(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-xs text-slate-200 focus:outline-none focus:border-orange-500"
+                    />
+                  </div>
+
+                  <button 
+                    type="submit" 
+                    disabled={dispatchLoading}
+                    className="w-full bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-bold py-2.5 rounded text-xs uppercase tracking-widest shadow-lg transition disabled:opacity-50"
+                  >
+                    {dispatchLoading ? 'DISPATCHING CARGO BALANCES...' : '🚀 Dispatch Stock'}
+                  </button>
+                </form>
+              </div>
+
+              {/* AUTOMATIC SUPPLY NETWORK SHIPMENT LOG LISTS */}
+              <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 lg:col-span-2">
+                <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest mb-4">Stock Dispatched Master Balance Log Spreadsheet</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400 font-bold bg-slate-950/40">
+                        <th className="p-3">Dispatch Timestamp</th>
+                        <th className="p-3">Destination Node</th>
+                        <th className="p-3">Material Variant</th>
+                        <th className="p-3 text-right">Volume Dispatched Sent</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800 text-xs">
+                      {replenishments.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="p-4 text-center text-slate-500">No central supply chains dispatched in database archives.</td>
+                        </tr>
+                      ) : (
+                        [...replenishments].reverse().map(rep => {
+                          const targetOutlet = OUTLETS.find(o => o.id === rep.outlet_id);
+                          return (
+                            <tr key={rep.id} className="hover:bg-slate-950/20">
+                              <td className="p-3 text-slate-400">{new Date(rep.created_at).toLocaleString()}</td>
+                              <td className="p-3 font-bold text-slate-300 uppercase">{targetOutlet ? targetOutlet.name : `Outlet ${rep.outlet_id}`}</td>
+                              <td className="p-3 font-bold text-slate-300">{rep.item_name}</td>
+                              <td className="p-3 text-right font-bold text-orange-400">+{rep.quantity_added} units</td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
+    );
+  }
 }
 

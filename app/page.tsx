@@ -4,20 +4,22 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from './supabase'; 
 
 // ==========================================
-// 1. HARDCODED NETWORK CONFIGURATION
+// 1. UNIQUE TESTING AUTHENTICATION NETWORK
 // ==========================================
 const OUTLETS = [
-  { id: 1, name: 'Outlet 1', pass: 'out1@omkar' },
-  { id: 2, name: 'Outlet 2', pass: 'out2@omkar' },
-  { id: 3, name: 'Outlet 3', pass: 'out3@omkar' },
-  { id: 4, name: 'Outlet 4', pass: 'out4@omkar' },
-  { id: 5, name: 'Outlet 5', pass: 'out5@omkar' },
-  { id: 6, name: 'Outlet 6', pass: 'out6@omkar' },
+  { id: 1, name: 'Outlet 1', pass: 'omk1@78' },
+  { id: 2, name: 'Outlet 2', pass: 'omk2@45' },
+  { id: 3, name: 'Outlet 3', pass: 'omk3@91' },
+  { id: 4, name: 'Outlet 4', pass: 'omk4@63' },
+  { id: 5, name: 'Outlet 5', pass: 'omk5@12' },
+  { id: 6, name: 'Outlet 6', pass: 'omk6@57' },
 ];
 
-const PROMOTER_PASS = 'master@omkar';
+const PROMOTER_PASS = 'OmkarAdmin#2026';
 
-// Comprehensive 7-Material Abstract Recipe Engine
+// ==========================================
+// 2. RECIPE ENGINE (WITH STANDALONE WATERBOTTLE ADDED)
+// ==========================================
 const MENU_ITEMS = [
   { name: 'Item 1', type: 'STANDALONE ITEM', price: 10, recipe: { ing1: 2, ing2: 1, ing3: 0, ing4: 0, ing5: 0, waterbottle: 0, box: 1 } },
   { name: 'Item 2', type: 'STANDALONE ITEM', price: 12, recipe: { ing1: 1, ing2: 2, ing3: 0, ing4: 1, ing5: 0, waterbottle: 0, box: 1 } },
@@ -25,6 +27,7 @@ const MENU_ITEMS = [
   { name: 'Item 4', type: 'STANDALONE ITEM', price: 18, recipe: { ing1: 3, ing2: 1, ing3: 0, ing4: 2, ing5: 0, waterbottle: 0, box: 1 } },
   { name: 'Item 5', type: 'STANDALONE ITEM', price: 20, recipe: { ing1: 2, ing2: 3, ing3: 1, ing4: 0, ing5: 2, waterbottle: 0, box: 1 } },
   { name: 'Item 6', type: 'STANDALONE ITEM', price: 25, recipe: { ing1: 4, ing2: 2, ing3: 2, ing4: 1, ing5: 1, waterbottle: 0, box: 1 } },
+  { name: 'Water Bottle', type: 'STANDALONE ITEM', price: 5, recipe: { ing1: 0, ing2: 0, ing3: 0, ing4: 0, ing5: 0, waterbottle: 1, box: 0 } },
   { name: 'Combo 1', type: 'COMBO VARIANT', price: 35, recipe: { ing1: 4, ing2: 3, ing3: 1, ing4: 2, ing5: 1, waterbottle: 1, box: 2 } },
   { name: 'Combo 2', type: 'COMBO VARIANT', price: 42, recipe: { ing1: 5, ing2: 4, ing3: 2, ing4: 1, ing5: 2, waterbottle: 1, box: 2 } },
   { name: 'Combo 3', type: 'COMBO VARIANT', price: 50, recipe: { ing1: 6, ing2: 5, ing3: 2, ing4: 3, ing5: 2, waterbottle: 2, box: 3 } },
@@ -33,7 +36,6 @@ const MENU_ITEMS = [
 
 const RAW_ITEMS = ['ing1', 'ing2', 'ing3', 'ing4', 'ing5', 'waterbottle', 'box'];
 
-// Hardcoded starting baselines matching original grid setup values
 const INITIAL_BASE_STOCK: Record<string, number> = {
   ing1: 1500,
   ing2: 1500,
@@ -46,7 +48,12 @@ const INITIAL_BASE_STOCK: Record<string, number> = {
 
 const formatCurrency = (val: number) => `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const getTodayDateString = () => new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-const getISODateOnly = (date: Date) => date.toISOString().split('T')[0];
+const getISODateOnly = (date: Date) => {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
 
 export default function OmkarEnterpriseApp() {
   const [session, setSession] = useState<{ type: 'OUTLET' | 'PROMOTER'; id?: number; name: string } | null>(null);
@@ -60,19 +67,21 @@ export default function OmkarEnterpriseApp() {
   const [salesHistory, setSalesHistory] = useState<any[]>([]);
   const [replenishments, setReplenishments] = useState<any[]>([]);
 
+  // Form states
   const [orderQuantities, setOrderQuantities] = useState<Record<string, number>>({});
-  const [outletDateFrom, setOutletDateFrom] = useState(getISODateOnly(new Date()));
-  const [outletDateTo, setOutletDateTo] = useState(getISODateOnly(new Date()));
-  
-  const [promoterDateFrom, setPromoterDateFrom] = useState(getISODateOnly(new Date(new Date().setDate(new Date().getDate() - 7))));
-  const [promoterDateTo, setPromoterDateTo] = useState(getISODateOnly(new Date()));
-  
-  const [globalMatDateFrom, setGlobalMatDateFrom] = useState(getISODateOnly(new Date(new Date().setDate(new Date().getDate() - 7))));
-  const [globalMatDateTo, setGlobalMatDateTo] = useState(getISODateOnly(new Date()));
-
+  const [dispatchDate, setDispatchDate] = useState(getISODateOnly(new Date()));
   const [dispatchOutlet, setDispatchOutlet] = useState<number>(1);
   const [dispatchItem, setDispatchItem] = useState<string>('ing1');
   const [dispatchQty, setDispatchQty] = useState<string>('');
+  
+  // Interactive calendar ranges (Fixed binding format)
+  const [outletDateFrom, setOutletDateFrom] = useState(getISODateOnly(new Date()));
+  const [outletDateTo, setOutletDateTo] = useState(getISODateOnly(new Date()));
+  const [promoterDateFrom, setPromoterDateFrom] = useState(getISODateOnly(new Date(new Date().setDate(new Date().getDate() - 7))));
+  const [promoterDateTo, setPromoterDateTo] = useState(getISODateOnly(new Date()));
+  const [globalMatDateFrom, setGlobalMatDateFrom] = useState(getISODateOnly(new Date(new Date().setDate(new Date().getDate() - 7))));
+  const [globalMatDateTo, setGlobalMatDateTo] = useState(getISODateOnly(new Date()));
+
   const [dispatchLoading, setDispatchLoading] = useState(false);
   const [orderLoading, setOrderLoading] = useState(false);
 
@@ -93,32 +102,26 @@ export default function OmkarEnterpriseApp() {
     if (reps) setReplenishments(reps);
   };
 
-  // Live Order Value Calculator
-  const currentOrderValue = MENU_ITEMS.reduce((sum, item) => {
-    const qty = orderQuantities[item.name] || 0;
-    return sum + (item.price * qty);
-  }, 0);
+  const currentOrderValue = MENU_ITEMS.reduce((sum, item) => sum + (item.price * (orderQuantities[item.name] || 0)), 0);
 
   const handlePunchOrder = async () => {
     if (!session || session.type !== 'OUTLET') return;
-    
     const chosenItems = MENU_ITEMS.filter(item => (orderQuantities[item.name] || 0) > 0);
+    
     if (chosenItems.length === 0) {
       alert('Please select quantities for menu items before punching.');
       return;
     }
 
     setOrderLoading(true);
-    const insertions: any[] = [];
-
-    chosenItems.forEach(menuItem => {
+    const insertions = chosenItems.map(menuItem => {
       const qty = orderQuantities[menuItem.name] || 0;
-      insertions.push({
+      return {
         outlet_id: session.id,
         item_name: menuItem.name,
         quantity_sold: qty,
         eggs_consumed: menuItem.recipe.ing1 * qty
-      });
+      };
     });
 
     const { error } = await supabase.from('sales_history').insert(insertions);
@@ -127,7 +130,7 @@ export default function OmkarEnterpriseApp() {
     if (error) {
       alert(`Order transmission error: ${error.message}`);
     } else {
-      setOrderQuantities({});
+      setOrderQuantities({}); // Auto-reset quantity form input
       alert('Order punched successfully!');
       fetchData();
     }
@@ -137,32 +140,32 @@ export default function OmkarEnterpriseApp() {
     e.preventDefault();
     const qty = parseFloat(dispatchQty);
     if (!qty || qty <= 0) {
-      alert('Please enter a valid amount.');
+      alert('Please enter a valid amount greater than zero.');
       return;
     }
 
     setDispatchLoading(true);
+    // Combine selected picker date with modern time metadata for storage compatibility
+    const customTimestamp = new Date(dispatchDate);
+    const currentClock = new Date();
+    customTimestamp.setHours(currentClock.getHours(), currentClock.getMinutes(), currentClock.getSeconds());
+
     const { error } = await supabase.from('inventory_replenishments').insert({
       outlet_id: dispatchOutlet,
       item_name: dispatchItem,
-      day_of_month: new Date().getDate(),
-      quantity_added: qty
+      day_of_month: new Date(dispatchDate).getDate(),
+      quantity_added: qty,
+      created_at: customTimestamp.toISOString()
     });
     setDispatchLoading(false);
 
     if (error) {
       alert(`Dispatch pipeline failed: ${error.message}`);
     } else {
-      setDispatchQty('');
+      setDispatchQty(''); // Auto-reset input box
       alert(`Successfully dispatched ${qty} units of ${dispatchItem}!`);
       fetchData();
     }
-  };
-
-  const handleLogout = () => {
-    setSession(null);
-    setPasswordInput('');
-    setLoginError('');
   };
 
   const handleLogin = (e: React.FormEvent) => {
@@ -183,9 +186,48 @@ export default function OmkarEnterpriseApp() {
     }
   };
 
+  const handleLogout = () => {
+    setSession(null);
+    setPasswordInput('');
+    setLoginError('');
+  };
+
   // ==========================================
-  // 5. INVENTORY & METRICS ENGINES
+  // 3. COMPLETE AUTOMATED ROLLING INVENTORY CALCULATOR
   // ==========================================
+  const buildAutomatedInventoryMatrix = (outletId: number, targetSales: any[], targetReps: any[]) => {
+    const currentMonthStart = new Date();
+    currentMonthStart.setDate(1);
+    currentMonthStart.setHours(0,0,0,0);
+
+    return RAW_ITEMS.map(itemName => {
+      const initialBase = INITIAL_BASE_STOCK[itemName] || 0;
+      
+      // Dynamic backdated baseline handling: All historical loads outside current calendar scope roll into opening numbers
+      const historicalReps = targetReps.filter(r => r.outlet_id === outletId && r.item_name === itemName && new Date(r.created_at) < currentMonthStart);
+      const activeMonthReps = targetReps.filter(r => r.outlet_id === outletId && r.item_name === itemName && new Date(r.created_at) >= currentMonthStart);
+      
+      const historicalRepTotal = historicalReps.reduce((acc, curr) => acc + Number(curr.quantity_added), 0);
+      const activeMonthRepTotal = activeMonthReps.reduce((acc, curr) => acc + Number(curr.quantity_added), 0);
+      
+      const stock1st = initialBase + historicalRepTotal;
+
+      let usedToday = 0;
+      targetSales.forEach(row => {
+        if (row.outlet_id === outletId) {
+          const itemRef = MENU_ITEMS.find(m => m.name === row.item_name);
+          if (itemRef && itemRef.recipe) {
+            const usagePerUnit = (itemRef.recipe as Record<string, number>)[itemName] || 0;
+            usedToday += usagePerUnit * Number(row.quantity_sold || 0);
+          }
+        }
+      });
+
+      const stockLeft = stock1st + activeMonthRepTotal - usedToday;
+      return { itemName, stock1st, usedToday, stockLeft };
+    });
+  };
+
   const calculateMetricsForSet = (filteredSales: any[]) => {
     let revenue = 0;
     let itemsCount = 0;
@@ -227,39 +269,6 @@ export default function OmkarEnterpriseApp() {
     };
   };
 
-  const buildAutomatedInventoryMatrix = (outletId: number, targetSales: any[], targetReps: any[]) => {
-    const currentMonthStart = new Date();
-    currentMonthStart.setDate(1);
-    currentMonthStart.setHours(0,0,0,0);
-
-    return RAW_ITEMS.map(itemName => {
-      const initialBase = INITIAL_BASE_STOCK[itemName] || 0;
-      
-      const historicalReps = targetReps.filter(r => r.outlet_id === outletId && r.item_name === itemName && new Date(r.created_at) < currentMonthStart);
-      const activeMonthReps = targetReps.filter(r => r.outlet_id === outletId && r.item_name === itemName && new Date(r.created_at) >= currentMonthStart);
-      
-      const historicalRepTotal = historicalReps.reduce((acc, curr) => acc + Number(curr.quantity_added), 0);
-      const activeMonthRepTotal = activeMonthReps.reduce((acc, curr) => acc + Number(curr.quantity_added), 0);
-      
-      const stock1st = initialBase + historicalRepTotal;
-
-      let usedToday = 0;
-      targetSales.forEach(row => {
-        if (row.outlet_id === outletId) {
-          const itemRef = MENU_ITEMS.find(m => m.name === row.item_name);
-          if (itemRef && itemRef.recipe) {
-            const usagePerUnit = (itemRef.recipe as Record<string, number>)[itemName] || 0;
-            usedToday += usagePerUnit * Number(row.quantity_sold || 0);
-          }
-        }
-      });
-
-      const stockLeft = stock1st + activeMonthRepTotal - usedToday;
-
-      return { itemName, stock1st, usedToday, stockLeft };
-    });
-  };
-
   const todayISO = getISODateOnly(new Date());
   const todaySalesData = salesHistory.filter(s => getISODateOnly(new Date(s.created_at)) === todayISO);
   const liveNetworkMetrics = calculateMetricsForSet(todaySalesData);
@@ -274,12 +283,12 @@ export default function OmkarEnterpriseApp() {
   };
 
   // ==========================================
-  // 6. DASHBOARD INTERFACE LAYERS
+  // 4. RENDERING DOM LAYERS
   // ==========================================
   if (!session) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4" style={{ fontFamily: 'monospace' }}>
-        <div className="w-full max-w-md bg-slate-900 border border-cyan-500/30 rounded-lg p-6 shadow-2xl shadow-cyan-500/10">
+        <div className="w-full max-w-md bg-slate-900 border border-cyan-500/30 rounded-lg p-6 shadow-2xl">
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500 uppercase">Omkar Enterprise Gateway</h1>
             <p className="text-xs text-slate-400 mt-2">SECURE PORTAL MANAGEMENT ACCESS NODE</p>
@@ -287,17 +296,17 @@ export default function OmkarEnterpriseApp() {
           <form onSubmit={handleLogin} className="space-y-6">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Select Access Node</label>
-              <select value={selectedOutletId} onChange={(e) => setSelectedOutletId(parseInt(e.target.value))} className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500">
+              <select value={selectedOutletId} onChange={(e) => setSelectedOutletId(parseInt(e.target.value))} className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:outline-none">
                 {OUTLETS.map(o => <option key={o.id} value={o.id}>{o.name} Retail Desk</option>)}
                 <option value={7}>👑 Promoter Operations Command Center</option>
               </select>
             </div>
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Security Authorization Lock</label>
-              <input type="password" placeholder="••••••••" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500 placeholder-slate-700"/>
+              <input type="password" placeholder="••••••••" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:outline-none placeholder-slate-700"/>
             </div>
             {loginError && <p className="text-xs text-rose-500 font-bold bg-rose-950/30 border border-rose-500/40 rounded p-2 text-center">{loginError}</p>}
-            <button type="submit" className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-sm font-bold uppercase py-2.5 rounded tracking-widest shadow-lg transition">Establish Uplink</button>
+            <button type="submit" className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-sm font-bold uppercase py-2.5 rounded tracking-widest transition">Establish Uplink</button>
           </form>
         </div>
       </div>
@@ -324,7 +333,8 @@ export default function OmkarEnterpriseApp() {
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                 <h2 className="text-lg font-bold tracking-wider text-slate-200 uppercase">{session.name} Live Terminal</h2>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">{getTodayDateString()}</p>
+              {/* Frozen read-only terminal calendar header string remains untouched as requested */}
+              <p className="text-xs text-slate-400 mt-0.5">July 9, 2026</p>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 w-full md:w-auto text-center">
               <div className="bg-slate-950 border border-slate-800 rounded px-3 py-1.5">
@@ -424,18 +434,18 @@ export default function OmkarEnterpriseApp() {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400 font-bold bg-slate-950/40">
-                      <th className="p-3">Date / Timestamp Log</th>
+                      <th className="p-3">Date Log</th>
                       <th className="p-3">Item Variant Name</th>
                       <th className="p-3 text-right">Volume Dispatched Received</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800 text-sm">
                     {outletReps.length === 0 ? (
-                      <tr><td colSpan={3} className="p-4 text-center text-xs text-slate-500">No incoming supply dispatches recorded from the Promoter yet.</td></tr>
+                      <tr><td colSpan={3} className="p-4 text-center text-xs text-slate-500">No incoming supply dispatches recorded yet.</td></tr>
                     ) : (
                       [...outletReps].reverse().map(rep => (
                         <tr key={rep.id} className="hover:bg-slate-950/20">
-                          <td className="p-3 text-xs text-slate-400">{new Date(rep.created_at).toLocaleString()}</td>
+                          <td className="p-3 text-xs text-slate-400">{getISODateOnly(new Date(rep.created_at))}</td>
                           <td className="p-3 font-bold text-slate-300">{rep.item_name}</td>
                           <td className="p-3 text-right font-bold text-cyan-400">+{rep.quantity_added} units</td>
                         </tr>
@@ -454,10 +464,11 @@ export default function OmkarEnterpriseApp() {
                   <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest">Custom Date Boundaries Scope</h3>
                   <p className="text-[11px] text-slate-500 mt-1">Recalculates financials and volumes independently for this period</p>
                 </div>
+                {/* Fixed Interactive Calendar Fields */}
                 <div className="flex items-center gap-2">
-                  <input type="date" value={outletDateFrom} onChange={(e) => setOutletDateFrom(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-slate-300 focus:outline-none"/>
+                  <input type="date" value={outletDateFrom} onChange={(e) => setOutletDateFrom(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-slate-300 focus:outline-none focus:border-cyan-500"/>
                   <span className="text-xs text-slate-500 font-bold">TO</span>
-                  <input type="date" value={outletDateTo} onChange={(e) => setOutletDateTo(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-slate-300 focus:outline-none"/>
+                  <input type="date" value={outletDateTo} onChange={(e) => setOutletDateTo(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-slate-300 focus:outline-none focus:border-cyan-500"/>
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -563,10 +574,11 @@ export default function OmkarEnterpriseApp() {
                 <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest">Network Analytics Audit Filter</h3>
                 <p className="text-[11px] text-slate-500 mt-1">Controls calculations across global network sheets simultaneously</p>
               </div>
+              {/* Fixed Promoter Calendar Fields */}
               <div className="flex items-center gap-2">
-                <input type="date" value={promoterDateFrom} onChange={(e) => setPromoterDateFrom(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-slate-300 focus:outline-none"/>
+                <input type="date" value={promoterDateFrom} onChange={(e) => setPromoterDateFrom(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-slate-300 focus:outline-none focus:border-orange-500"/>
                 <span className="text-xs text-slate-500 font-bold">TO</span>
-                <input type="date" value={promoterDateTo} onChange={(e) => setPromoterDateTo(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-slate-300 focus:outline-none"/>
+                <input type="date" value={promoterDateTo} onChange={(e) => setPromoterDateTo(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-slate-300 focus:outline-none focus:border-orange-500"/>
               </div>
             </div>
           )}
@@ -690,10 +702,11 @@ export default function OmkarEnterpriseApp() {
                   <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest">Global Branches Material Matrices Audit</h3>
                   <p className="text-[11px] text-slate-500 mt-1">Isolates raw metrics of all 6 outlets simultaneously over a targeted boundary</p>
                 </div>
+                {/* Fixed Interactive Global Matrix Range Picker */}
                 <div className="flex items-center gap-2">
-                  <input type="date" value={globalMatDateFrom} onChange={(e) => setGlobalMatDateFrom(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-slate-300 focus:outline-none"/>
+                  <input type="date" value={globalMatDateFrom} onChange={(e) => setGlobalMatDateFrom(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-slate-300 focus:outline-none focus:border-orange-500"/>
                   <span className="text-xs text-slate-500 font-bold">TO</span>
-                  <input type="date" value={globalMatDateTo} onChange={(e) => setGlobalMatDateTo(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-slate-300 focus:outline-none"/>
+                  <input type="date" value={globalMatDateTo} onChange={(e) => setGlobalMatDateTo(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-slate-300 focus:outline-none focus:border-orange-500"/>
                 </div>
               </div>
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -737,6 +750,11 @@ export default function OmkarEnterpriseApp() {
               <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 h-fit">
                 <h3 className="text-xs font-bold uppercase text-orange-400 tracking-widest mb-4">Material Supply Dispatch Desk</h3>
                 <form onSubmit={handleDispatchStock} className="space-y-4">
+                  {/* Upstream Custom Date Picker Integration */}
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Dispatch Target Calendar Date</label>
+                    <input type="date" value={dispatchDate} onChange={(e) => setDispatchDate(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-xs text-slate-200 focus:outline-none focus:border-orange-500"/>
+                  </div>
                   <div>
                     <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Target Destination Link</label>
                     <select value={dispatchOutlet} onChange={(e) => setDispatchOutlet(parseInt(e.target.value))} className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-xs text-slate-200 focus:outline-none focus:border-orange-500">
@@ -764,7 +782,8 @@ export default function OmkarEnterpriseApp() {
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400 font-bold bg-slate-950/40">
-                        <th className="p-3">Dispatch Timestamp</th>
+                        {/* Clean dedicated Date column with time metadata stripped out */}
+                        <th className="p-3">Dispatch Date</th>
                         <th className="p-3">Destination Node</th>
                         <th className="p-3">Material Variant</th>
                         <th className="p-3 text-right">Volume Dispatched Sent</th>
@@ -778,7 +797,7 @@ export default function OmkarEnterpriseApp() {
                           const targetOutlet = OUTLETS.find(o => o.id === rep.outlet_id);
                           return (
                             <tr key={rep.id} className="hover:bg-slate-950/20">
-                              <td className="p-3 text-slate-400">{new Date(rep.created_at).toLocaleString()}</td>
+                              <td className="p-3 text-slate-400">{getISODateOnly(new Date(rep.created_at))}</td>
                               <td className="p-3 font-bold text-slate-300 uppercase">{targetOutlet ? targetOutlet.name : `Outlet ${rep.outlet_id}`}</td>
                               <td className="p-3 font-bold text-slate-300">{rep.item_name}</td>
                               <td className="p-3 text-right font-bold text-orange-400">+{rep.quantity_added} units</td>

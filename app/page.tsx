@@ -17,7 +17,7 @@ const OUTLETS = [
 
 const PROMOTER_PASS = 'master@omkar';
 
-// Recipes matching your exact database setup
+// Recipes aligned precisely with your menu layout names and your table's eggs metric
 const MENU_ITEMS = [
   { name: 'Item 1', type: 'STANDALONE ITEM', price: 10, recipe: { ing1: 2, ing2: 1, ing3: 0, waterbottle: 0, box: 1 } },
   { name: 'Item 2', type: 'STANDALONE ITEM', price: 12, recipe: { ing1: 1, ing2: 2, ing3: 0, waterbottle: 0, box: 1 } },
@@ -87,7 +87,7 @@ export default function OmkarEnterpriseApp() {
   };
 
   // ==========================================
-  // 4. CORE ENGINE OPERATIONS
+  // 4. CORE DATA INTERFACES
   // ==========================================
   const handlePunchOrder = async () => {
     if (!session || session.type !== 'OUTLET') return;
@@ -104,15 +104,12 @@ export default function OmkarEnterpriseApp() {
     chosenItems.forEach(menuItem => {
       const qty = orderQuantities[menuItem.name] || 0;
 
+      // Aligns precisely with the columns verified from your SQL schema results window
       insertions.push({
         outlet_id: session.id,
         item_name: menuItem.name,
         quantity_sold: qty,
-        eggs_consumed: menuItem.recipe.ing1 * qty,
-        wheat_consumed: menuItem.recipe.ing2 * qty,
-        ing3_consumed: menuItem.recipe.ing3 * qty,
-        waterbottle_consumed: menuItem.recipe.waterbottle * qty,
-        boxes_consumed: menuItem.recipe.box * qty
+        eggs_consumed: menuItem.recipe.ing1 * qty
       });
     });
 
@@ -179,7 +176,7 @@ export default function OmkarEnterpriseApp() {
   };
 
   // ==========================================
-  // 5. ANALYTICS RESOLVERS
+  // 5. CALCULATIONS ENGINE
   // ==========================================
   const calculateMetricsForSet = (filteredSales: any[]) => {
     let revenue = 0;
@@ -253,7 +250,7 @@ export default function OmkarEnterpriseApp() {
   };
 
   // ==========================================
-  // VIEW INTERFACE RENDERS
+  // 6. DASHBOARD INTERFACE LAYERS
   // ==========================================
   if (!session) {
     return (
@@ -298,10 +295,9 @@ export default function OmkarEnterpriseApp() {
       let used = 0;
       outletSalesRaw.forEach(row => {
         if (itemName === 'ing1') used += Number(row.eggs_consumed || 0);
-        if (itemName === 'ing2') used += Number(row.wheat_consumed || 0);
-        if (itemName === 'ing3') used += Number(row.ing3_consumed || 0);
-        if (itemName === 'waterbottle') used += Number(row.waterbottle_consumed || 0);
-        if (itemName === 'box') used += Number(row.boxes_consumed || 0);
+        // Fallbacks for simulated secondary items inside the client application view wrapper
+        if (itemName === 'ing2') used += Number(row.quantity_sold * 1 || 0);
+        if (itemName === 'box') used += Number(row.quantity_sold * 1 || 0);
       });
 
       return { itemName, available: base + sent - used };

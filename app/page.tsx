@@ -39,7 +39,7 @@ interface SalesLog {
   outlet_id: number
   item_name: string
   quantity_sold: number
-  date_string: string // Clean localized calendar string used to dodge UTC/timezone stall blocks
+  date_string: string 
   created_at: string
 }
 
@@ -63,15 +63,12 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [quantities, setQuantities] = useState<{ [key: string]: number }>({})
 
-  // NOTIFICATION BANNER STATE
   const [notification, setNotification] = useState<string | null>(null)
 
-  // NAVIGATION TABS CONTROLLERS
   const [promoterTab, setPromoterTab] = useState<'overview' | 'branches' | 'revenue_audit' | 'dispatches' | 'security'>('overview')
   const [outletTab, setOutletTab] = useState<'counter' | 'ledger' | 'received_stock'>('counter')
   const [promoterActiveTab, setPromoterActiveTab] = useState<'consumption' | 'dispatches'>('consumption')
 
-  // EXPLICIT SEPARATE CALENDAR DATETIME PICKERS
   const [overviewStartDate, setOverviewStartDate] = useState<string>(() => {
     const today = new Date()
     return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
@@ -90,7 +87,6 @@ export default function Home() {
     return { 1: initialRange, 2: initialRange, 3: initialRange, 4: initialRange, 5: initialRange, 6: initialRange }
   })
 
-  // NEW DEDICATED DATE RANGE STATE FOR THE REVENUE AUDIT CARDS TAB
   const [revenueCardDateRanges, setRevenueCardDateRanges] = useState<{ [key: number]: { start: string; end: string } }>(() => {
     const today = new Date()
     const yyyy = today.getFullYear()
@@ -100,7 +96,6 @@ export default function Home() {
     return { 1: initialRange, 2: initialRange, 3: initialRange, 4: initialRange, 5: initialRange, 6: initialRange }
   })
 
-  // INDEPENDENT CALENDAR PICKER FOR OUTLET RECEIVED STOCK TAB
   const [outletReceivedStart, setOutletReceivedStart] = useState<string>(() => {
     const today = new Date()
     return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
@@ -110,7 +105,6 @@ export default function Home() {
     return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
   })
 
-  // EXPLICIT MANUAL DISTRIBUTION DISPATCH FORM CONTROL FIELDS
   const [dispatchOutletId, setDispatchOutletId] = useState<number>(1)
   const [dispatchItemName, setDispatchItemName] = useState<string>('Egg')
   const [dispatchQty, setDispatchQty] = useState<number>(0)
@@ -167,7 +161,6 @@ export default function Home() {
     return name
   }
 
-  // GENERATE UNIQUE LOCAL BROWSER INSTANCE SIGNATURES TO BLOCK CONCURRENT TERMINAL LOGINS
   const getOrCreateDeviceSignatureToken = () => {
     if (typeof window === 'undefined') return ''
     let token = localStorage.getItem('omk_device_signature_token')
@@ -178,7 +171,6 @@ export default function Home() {
     return token
   }
 
-  // PERSIST WORKSPACE SESSION PREFERENCES UPON BROWSER PAGE RELOADS
   useEffect(() => {
     const savedMode = localStorage.getItem('omk_current_mode')
     const savedOutletId = localStorage.getItem('omk_selected_outlet_id')
@@ -191,7 +183,6 @@ export default function Home() {
     }
   }, [])
 
-  // REAL-TIME SECURITY SESSIONS HEARTBEAT INTEGRITY VERIFICATION
   useEffect(() => {
     const fetchSecuritySessions = async () => {
       const { data } = await supabase.from('counter_sessions').select('*')
@@ -209,7 +200,6 @@ export default function Home() {
       const maintainHeartbeatAndPollAlerts = async () => {
         const { data } = await supabase.from('counter_sessions').select('*').eq('outlet_id', selectedOutlet.id).maybeSingle()
         
-        // BOOT SCREEN INITIATION: Eject session if device keys mismatch or managed cleared
         if (data && (!data.is_logged_in || (data.device_token && data.device_token !== currentDeviceToken))) {
           alert('Security Alert: This session has been accessed on another physical layout device or force-cleared.')
           exitToGateway()
@@ -257,7 +247,6 @@ export default function Home() {
     setLoading(false)
   }
 
-  // STRICT SINGLE SECURITY DEVICE VERIFICATION ENTRY LOCK GATEWAY ACTION
   const handleSystemGateUnlock = async () => {
     if (!selectedOutlet) {
       if (passwordInput === 'OmkarAdmin#2026') {
@@ -277,7 +266,6 @@ export default function Home() {
       const verifiedTargetKey = secureOutletKeys[selectedOutlet.id]
       if (passwordInput === verifiedTargetKey) {
         
-        // INTERROGATE LIVE STATUS FIRST TO ENFORCE MULTI-DEVICE PROTECTION
         const { data: liveSessionCheck } = await supabase.from('counter_sessions').select('*').eq('outlet_id', selectedOutlet.id).maybeSingle()
         const currentDeviceToken = getOrCreateDeviceSignatureToken()
         
@@ -329,11 +317,9 @@ export default function Home() {
     }).reduce((a, c) => a + Number(c.quantity_added), 0)
 
     const totalUsedEver = allSalesHistory.filter(s => {
-      // Ingredient deduction matching keys
       if (distinctIngredients.includes(s.item_name)) {
         return s.item_name === itemName && s.outlet_id === targetOutletId
       }
-      // If menu item match, translate usage via recipes
       const menuRef = menuItems.find(m => m.name === s.item_name)
       const ingUsage = menuRef?.recipe.find(r => r.ingredient === itemName)?.qty || 0
       return s.outlet_id === targetOutletId && ingUsage > 0
@@ -345,7 +331,8 @@ export default function Home() {
     }, 0)
     
     const usedToday = allSalesHistory.filter(s => {
-      const matchesDate = s.date_string === liveOperatingDate
+      const cleanDbDate = s.date_string ? s.date_string.split('T')[0] : ''
+      const matchesDate = cleanDbDate === liveOperatingDate
       if (!matchesDate || s.outlet_id !== targetOutletId) return false
       if (s.item_name === itemName) return true
       const menuRef = menuItems.find(m => m.name === s.item_name)
@@ -361,19 +348,18 @@ export default function Home() {
     return { usedToday, currentStockLeft }
   }
 
-  // UNIFIED DYNAMIC METRIC ENGINE OPERATING OFF UNBIASED SYSTEM OVERRIDES
+  // GLOBAL METRIC ENGINE FIX: Normalizes timestamps safely across all timezones
   const getOutletSalesStatsForDateRange = (targetOutletId: number, startDay: string, endDay: string) => {
     let salesAmountTotal = 0
     let transactionsLoggedCount = 0
     let totalItemsDispatchedCount = 0
 
     allSalesHistory.forEach(s => {
-      if (s.outlet_id === targetOutletId && s.date_string >= startDay && s.date_string <= endDay) {
-        // EXACT ATOMIC COUNT ANCHOR: Tracks individual 'Boxes' row submissions to increase order count cleanly by +1
+      const cleanDbDate = s.date_string ? s.date_string.split('T')[0] : ''
+      if (s.outlet_id === targetOutletId && cleanDbDate >= startDay && cleanDbDate <= endDay) {
         if (s.item_name === 'Boxes') {
           transactionsLoggedCount += s.quantity_sold
         } else if (!distinctIngredients.includes(s.item_name)) {
-          // If it's a direct menu variant, calculate financial revenue additions
           totalItemsDispatchedCount += s.quantity_sold
           salesAmountTotal += (s.quantity_sold * (menuItems.find(m => m.name === s.item_name)?.price || 0))
         }
@@ -383,12 +369,13 @@ export default function Home() {
     return { salesAmountTotal, transactionsLoggedCount, totalItemsDispatchedCount }
   }
 
-  // DYNAMIC MENU SALES LOG BREAKDOWN: Pulls directly from stored actual menu titles
+  // BREAKDOWN METRIC ENGINE FIX: Normalizes timestamps for item listings
   const getProductSalesPerformanceBreakdown = (targetOutletId: number | 'ALL', startDay: string, endDay: string) => {
     return menuItems.map(menuItem => {
       const unitsSold = allSalesHistory.filter(s => {
         const matchesOutlet = targetOutletId === 'ALL' || s.outlet_id === targetOutletId
-        const matchesRange = s.date_string >= startDay && s.date_string <= endDay
+        const cleanDbDate = s.date_string ? s.date_string.split('T')[0] : ''
+        const matchesRange = cleanDbDate >= startDay && cleanDbDate <= endDay
         return s.item_name === menuItem.name && matchesOutlet && matchesRange
       }).reduce((a, c) => a + Number(c.quantity_sold), 0)
 
@@ -396,14 +383,12 @@ export default function Home() {
     })
   }
 
-  // COMPUTE HIGH VELOCITY HERO PRODUCT IDENTIFIERS FOR HIGHLIGHT PILLS
   const getTopPerformerLabel = (targetOutletId: number | 'ALL', startDay: string, endDay: string) => {
     const list = getProductSalesPerformanceBreakdown(targetOutletId, startDay, endDay)
     const sorted = [...list].sort((a, b) => b.unitsSold - a.unitsSold)
     return sorted[0] && sorted[0].unitsSold > 0 ? sorted[0].name : 'None'
   }
 
-  // CENTRAL MATERIAL DISPATCH EXECUTION CONTROLLER
   const handleExecuteStockDispatch = async () => {
     if (dispatchQty <= 0) return alert('Please enter a valid stock volume amount')
     
@@ -443,7 +428,6 @@ export default function Home() {
 
     const activeLocalStamp = getTodayDateString()
 
-    // Write real structural menu selection line records directly into database logs
     for (const item of menuItems) {
       const selectedVolumeCount = quantities[item.id] || 0
       if (selectedVolumeCount > 0) {
@@ -457,7 +441,6 @@ export default function Home() {
       }
     }
 
-    // UNIQUE ATOMIC ORDER TRACKER ROW: Anchor token mapping explicitly to 'Boxes' to secure perfect unskewed transaction metrics
     await supabase.from('sales_history').insert({
       outlet_id: selectedOutlet.id,
       item_name: 'Boxes',
@@ -513,7 +496,6 @@ export default function Home() {
   currentRenderHeaders.forEach(headerKey => { dynamicBottomTotals[headerKey] = 0 })
   let spreadsheetGrandTotal = 0
 
-  // CALCULATION MATRIX: Central aggregate tracker
   let globalPromoterTodaySalesRevenue = 0
   let globalPromoterTodayOrderCount = 0
   let globalPromoterTodayItemCount = 0
@@ -581,8 +563,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* OUTLET CORE METRICS SUMMARY DISPLAY PANEL */}
-        <header className="mb-4 sticky top-0 bg-slate-950/95 backdrop-blur border-b border-slate-800 pb-4 z-40 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+        <header className="mb-4 sticky top-0 bg-slate-955/95 backdrop-blur border-b border-slate-800 pb-4 z-40 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
           <div className="flex items-center gap-4">
             <div>
               <h1 className="text-2xl font-black">{selectedOutlet.name} Live Terminal</h1>
@@ -592,7 +573,6 @@ export default function Home() {
               </div>
             </div>
             
-            {/* RESTORED OUTLET WORKSPACE TOP PERFORMER DISPLAY COMPONENT */}
             <div className="bg-gradient-to-r from-purple-950/40 to-blue-950/30 border border-purple-900/60 px-4 py-2 rounded-xl hidden sm:block">
               <span className="text-[9px] uppercase font-black text-purple-400 block tracking-widest">Outlet Top Performer</span>
               <span className="text-xs font-extrabold text-white font-sans">{getTopPerformerLabel(selectedOutlet.id, liveOperatingDate, liveOperatingDate)}</span>
@@ -616,7 +596,6 @@ export default function Home() {
           </div>
         </header>
 
-        {/* OUTLET SWITCHER SELECTION TABS BAR */}
         <div className="flex gap-2 border-b border-slate-800 mb-6">
           <button onClick={() => setOutletTab('counter')} className={`px-5 py-2.5 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${outletTab === 'counter' ? 'bg-slate-900 text-blue-400 border-b-2 border-blue-500' : 'text-slate-500 hover:text-slate-300'}`}>🛒 Counter Desk Terminal</button>
           <button onClick={() => setOutletTab('ledger')} className={`px-5 py-2.5 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${outletTab === 'ledger' ? 'bg-slate-900 text-amber-400 border-b-2 border-amber-500' : 'text-slate-500 hover:text-slate-300'}`}>📜 Sales Ledger Audit</button>
@@ -803,15 +782,13 @@ export default function Home() {
         </div>
       )}
 
-      {/* CENTRALIZED PROMOTER DASHBOARD CONTROL HEAD PANEL */}
-      <header className="sticky top-0 bg-slate-950/95 backdrop-blur z-40 border-b border-slate-800 pb-4 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+      <header className="sticky top-0 bg-slate-955/95 backdrop-blur z-40 border-b border-slate-800 pb-4 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
         <div className="flex items-center gap-4">
           <div>
             <h1 className="text-2xl font-black text-amber-400 tracking-tight">👑 Omkar enterprise Command Dashboard</h1>
             <p className="text-[10px] text-slate-500 font-mono mt-0.5 uppercase tracking-widest">Global Master Operations, Logistics & Security Panel</p>
           </div>
 
-          {/* RESTORED GLOBAL DASHBOARD NETWORK WIDE TOP PERFORMER WIDGET */}
           <div className="bg-gradient-to-r from-amber-500/10 to-blue-500/5 border border-amber-500/20 px-4 py-2 rounded-xl hidden md:block">
             <span className="text-[9px] uppercase font-black text-amber-400 block tracking-widest">Network Top Performer</span>
             <span className="text-xs font-black text-white font-sans">{getTopPerformerLabel('ALL', liveOperatingDate, liveOperatingDate)}</span>
@@ -835,7 +812,6 @@ export default function Home() {
         </div>
       </header>
 
-      {/* NAVIGATION TABS SELECTOR ROW */}
       <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-0.5">
         <button onClick={() => setPromoterTab('overview')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${promoterTab === 'overview' ? 'bg-slate-900 text-blue-400 border-b-2 border-blue-500' : 'text-slate-500 hover:text-slate-300'}`}>📊 Network Overview</button>
         <button onClick={() => setPromoterTab('branches')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${promoterTab === 'branches' ? 'bg-slate-900 text-purple-400 border-b-2 border-purple-500' : 'text-slate-500 hover:text-slate-300'}`}>🏪 Branch-by-Branch Matrix</button>
@@ -979,7 +955,6 @@ export default function Home() {
                     </div>
                   </div>
 
-                  {/* HIGH CONTRAST DYNAMIC TOP PERFORMER COMPONENT INSIDE MATRIX CARDS */}
                   <div className="bg-slate-950/80 rounded-xl px-3 py-1.5 border border-purple-900/30 text-center">
                     <span className="text-[10px] font-sans text-purple-400 font-bold block">
                       ⭐ Window Best Seller: <span className="text-white font-mono font-black">{getTopPerformerLabel(o.id, localRange.start, localRange.end)}</span>
@@ -1002,7 +977,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* NEWLY ADDED DEDICATED REVENUE AUDIT CARDS SUITE TAB */}
       {promoterTab === 'revenue_audit' && (
         <div className="space-y-6">
           <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
@@ -1018,7 +992,6 @@ export default function Home() {
               return (
                 <div key={o.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-md flex flex-col justify-between space-y-4">
                   
-                  {/* CARD TITLE LAYOUT HEADER */}
                   <div className="flex justify-between items-start border-b border-slate-800 pb-2">
                     <div>
                       <h4 className="text-base font-black text-emerald-400">{o.name} Revenue Card</h4>
@@ -1027,7 +1000,6 @@ export default function Home() {
                     <span className="text-xs font-mono font-black text-emerald-400 bg-slate-950 px-2 py-0.5 border border-slate-800 rounded">${auditStats.salesAmountTotal.toLocaleString()}</span>
                   </div>
 
-                  {/* DATE SELECTION SEGMENT */}
                   <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 space-y-2">
                     <span className="text-[9px] uppercase font-bold text-slate-500 block">Card Audit Date Window</span>
                     <div className="flex items-center justify-between gap-1 font-mono text-[11px]">
@@ -1047,7 +1019,6 @@ export default function Home() {
                     </div>
                   </div>
 
-                  {/* STATS MATRIX GRID */}
                   <div className="grid grid-cols-3 gap-2 text-center font-mono text-xs pt-1">
                     <div className="bg-slate-950/40 p-2 rounded border border-slate-800/60">
                       <span className="text-[9px] font-sans text-slate-500 block">Total Revenue</span>
@@ -1063,14 +1034,12 @@ export default function Home() {
                     </div>
                   </div>
 
-                  {/* HIGHEST VELOCITY SELLER PILL */}
                   <div className="bg-amber-500/10 rounded-xl px-3 py-1.5 border border-amber-500/20 text-center">
                     <span className="text-[10px] font-sans text-amber-400 font-bold block">
                       🏆 Highest Velocity Seller: <span className="text-white font-mono font-black">{getTopPerformerLabel(o.id, auditRange.start, auditRange.end)}</span>
                     </span>
                   </div>
 
-                  {/* ITEMIZED SALES BREAKDOWN SHEET WITH EXPLICIT VALUES */}
                   <div className="bg-slate-950 rounded-xl p-3 border border-slate-800 space-y-1 text-[11px] max-h-36 overflow-y-auto">
                     <span className="text-[9px] text-emerald-400 uppercase font-bold tracking-wider block mb-1">Itemized Sales Dissection:</span>
                     {getProductSalesPerformanceBreakdown(o.id, auditRange.start, auditRange.end).map(prod => (
@@ -1183,12 +1152,14 @@ export default function Home() {
                             if (shouldRenderIngredientColumns) {
                               const targetIngName = colHeader
                               computedValue = allSalesHistory.filter(s => {
-                                return s.item_name === targetIngName && (auditOutletFilter === 'ALL' || s.outlet_id === Number(auditOutletFilter)) && s.date_string === dateString
+                                const cleanDbDate = s.date_string ? s.date_string.split('T')[0] : ''
+                                return s.item_name === targetIngName && (auditOutletFilter === 'ALL' || s.outlet_id === Number(auditOutletFilter)) && cleanDbDate === dateString
                               }).reduce((a, c) => a + Number(c.quantity_sold), 0)
                             } else {
                               const targetOutletId = outlets.find(o => o.name === colHeader)?.id || 0
                               computedValue = allSalesHistory.filter(s => {
-                                return s.item_name === auditIngredient && s.outlet_id === targetOutletId && s.date_string === dateString
+                                const cleanDbDate = s.date_string ? s.date_string.split('T')[0] : ''
+                                return s.item_name === auditIngredient && s.outlet_id === targetOutletId && cleanDbDate === dateString
                               }).reduce((a, c) => a + Number(c.quantity_sold), 0)
                             }
                           } else {

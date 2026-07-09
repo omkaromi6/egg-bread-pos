@@ -53,12 +53,16 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [quantities, setQuantities] = useState<{ [key: string]: number }>({})
 
-  // PROMOTER NAVIGATION CONTROLLER (Matches your reference image exactly)
+  // PROMOTER NAVIGATION CONTROLLER (Matches your reference layouts)
   const [promoterTab, setPromoterTab] = useState<'overview' | 'branches' | 'revenue_matrix' | 'dispatch' | 'security'>('overview')
-  const [promoterActiveTab, setPromoterActiveTab] = useState<'consumption' | 'dispatches'>('consumption')
   
-  // OUTLET NEW ISOLATED CLEAN TABS CONTROLLER (4 clean tabs)
+  // OUTLET TABS CONTROLLER (4 clean tabs)
   const [outletTab, setOutletTab] = useState<'counter' | 'blueprint' | 'history' | 'lookup'>('counter')
+
+  // Stock Dispatch Desk Active Input States
+  const [dispatchOutlet, setDispatchOutlet] = useState<string>('1')
+  const [dispatchIngredient, setDispatchIngredient] = useState<string>('Egg')
+  const [dispatchQty, setDispatchQty] = useState<number>(0)
 
   // Hardcoded helper to grab standard YYYY-MM-DD
   const getTodayDateString = () => {
@@ -82,8 +86,6 @@ export default function Home() {
     return `${today.getFullYear()}-${mm}-01`
   })
   const [auditEndDate, setAuditEndDate] = useState<string>(getTodayDateString())
-  const [auditIngredient, setAuditIngredient] = useState<string>('ALL')
-  const [auditOutletFilter, setAuditOutletFilter] = useState<string>('ALL')
 
   // Dedicated range states for independent Promoter Revenue Matrix Cards matching image offsets
   const [revenueCardDateRanges, setRevenueCardDateRanges] = useState<{ [key: number]: { start: string; end: string } }>(() => {
@@ -98,9 +100,6 @@ export default function Home() {
     const initialRange = { start: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`, end: getTodayDateString() }
     return { 1: initialRange, 2: initialRange, 3: initialRange, 4: initialRange, 5: initialRange, 6: initialRange }
   })
-
-  const [activeReplenishItem, setActiveReplenishItem] = useState<string | null>(null)
-  const [newRepQty, setNewRepQty] = useState(0)
 
   const outlets: Outlet[] = [
     { id: 1, name: 'Outlet 1' }, { id: 2, name: 'Outlet 2' }, { id: 3, name: 'Outlet 3' },
@@ -198,13 +197,14 @@ export default function Home() {
     return { usedToday, currentStockLeft }
   }
 
+  // CORE ANALYTICS MATRIX: Reads the exact raw material strings mapped to your database logs
   const getOutletSalesStatsForDateRange = (targetOutletId: number, startDay: string, endDay: string) => {
     let salesAmountTotal = 0
     let transactionsLoggedCount = 0
     let totalItemsDispatchedCount = 0
 
-    const breakdownQuantities: { [key: string]: number } = {}
-    menuItems.forEach(item => { breakdownQuantities[item.name] = 0 })
+    const rawIngredientQuantities: { [key: string]: number } = {}
+    distinctIngredients.forEach(ing => { rawIngredientQuantities[ing] = 0 })
 
     allSalesHistory.forEach(s => {
       const recordDate = s.created_at ? s.created_at.split('T')[0] : ''
@@ -212,36 +212,40 @@ export default function Home() {
         if (s.item_name === 'Boxes') {
           transactionsLoggedCount += s.quantity_sold
           salesAmountTotal += (s.quantity_sold * 12) 
+        } else if (s.item_name !== 'Boxes') {
+          rawIngredientQuantities[s.item_name] = (rawIngredientQuantities[s.item_name] || 0) + s.quantity_sold
+          totalItemsDispatchedCount += s.quantity_sold
         }
       }
     })
 
-    const eggCount = allSalesHistory.filter(s => s.item_name === 'Egg' && s.outlet_id === targetOutletId && (s.created_at ? s.created_at.split('T')[0] : '') >= startDay && (s.created_at ? s.created_at.split('T')[0] : '') <= endDay).reduce((a, c) => a + Number(c.quantity_sold), 0)
-    const wheatCount = allSalesHistory.filter(s => s.item_name === 'Wheat' && s.outlet_id === targetOutletId && (s.created_at ? s.created_at.split('T')[0] : '') >= startDay && (s.created_at ? s.created_at.split('T')[0] : '') <= endDay).reduce((a, c) => a + Number(c.quantity_sold), 0)
-    const ing3Count = allSalesHistory.filter(s => s.item_name === 'Ing3' && s.outlet_id === targetOutletId && (s.created_at ? s.created_at.split('T')[0] : '') >= startDay && (s.created_at ? s.created_at.split('T')[0] : '') <= endDay).reduce((a, c) => a + Number(c.quantity_sold), 0)
-    const ing4Count = allSalesHistory.filter(s => s.item_name === 'Ing4' && s.outlet_id === targetOutletId && (s.created_at ? s.created_at.split('T')[0] : '') >= startDay && (s.created_at ? s.created_at.split('T')[0] : '') <= endDay).reduce((a, c) => a + Number(c.quantity_sold), 0)
-    const ing5Count = allSalesHistory.filter(s => s.item_name === 'Ing5' && s.outlet_id === targetOutletId && (s.created_at ? s.created_at.split('T')[0] : '') >= startDay && (s.created_at ? s.created_at.split('T')[0] : '') <= endDay).reduce((a, c) => a + Number(c.quantity_sold), 0)
-    const waterCount = allSalesHistory.filter(s => s.item_name === 'Water bottle' && s.outlet_id === targetOutletId && (s.created_at ? s.created_at.split('T')[0] : '') >= startDay && (s.created_at ? s.created_at.split('T')[0] : '') <= endDay).reduce((a, c) => a + Number(c.quantity_sold), 0)
-
-    breakdownQuantities['Item 1'] = eggCount
-    breakdownQuantities['Item 2'] = wheatCount
-    breakdownQuantities['Item 3'] = ing3Count
-    breakdownQuantities['Item 4'] = ing4Count
-    breakdownQuantities['Item 5'] = ing5Count
-    breakdownQuantities['Item 6'] = waterCount
-
-    totalItemsDispatchedCount = eggCount + wheatCount + ing3Count + ing4Count + ing5Count + waterCount
-
     let highestQty = 0
-    let highestName = 'None'
-    Object.entries(breakdownQuantities).forEach(([name, qty]) => {
-      if (qty > highestQty) {
+    let highestIngredientName = 'None'
+    Object.entries(rawIngredientQuantities).forEach(([name, qty]) => {
+      if (qty > highestQty && name !== 'Boxes') {
         highestQty = qty
-        highestName = name
+        highestIngredientName = formatIngredientLabel(name)
       }
     })
 
-    return { salesAmountTotal, transactionsLoggedCount, totalItemsDispatchedCount, breakdownQuantities, highestName }
+    return { salesAmountTotal, transactionsLoggedCount, totalItemsDispatchedCount, rawIngredientQuantities, highestIngredientName }
+  }
+
+  // STOCK DISPATCH LOGIC: Directly modifies warehouse registries for selected locations
+  const handleExecuteDispatch = async () => {
+    if (dispatchQty <= 0) return alert('Please input a valid dispatch volume amount.')
+    const dayInt = new Date(liveOperatingDate).getDate()
+
+    await supabase.from('inventory_replenishments').insert({
+      outlet_id: Number(dispatchOutlet),
+      item_name: dispatchIngredient,
+      day_of_month: dayInt,
+      quantity_added: dispatchQty
+    })
+
+    alert(`Successfully dispatched ${dispatchQty} units of ${formatIngredientLabel(dispatchIngredient)} to Outlet ${dispatchOutlet}!`)
+    setDispatchQty(0)
+    syncGlobalDatabaseData()
   }
 
   const handlePunchOrder = async () => {
@@ -300,25 +304,6 @@ export default function Home() {
     setQuantities({})
   }
 
-  const generateAuditDateRangeList = (start: string, end: string) => {
-    const list: string[] = []
-    const current = new Date(start)
-    const targetEnd = new Date(end)
-    while (current <= targetEnd) {
-      list.push(current.toISOString().split('T')[0])
-      current.setDate(current.getDate() + 1)
-    }
-    return list
-  }
-
-  const auditDatesArray = generateAuditDateRangeList(auditStartDate, auditEndDate)
-  const shouldRenderIngredientColumns = auditIngredient === 'ALL' || auditOutletFilter !== 'ALL'
-  const currentRenderHeaders = shouldRenderIngredientColumns ? distinctIngredients : outlets.map(o => o.name)
-
-  const dynamicBottomTotals: { [key: string]: number } = {}
-  currentRenderHeaders.forEach(headerKey => { dynamicBottomTotals[headerKey] = 0 })
-  let spreadsheetGrandTotal = 0
-
   let globalPromoterTodaySalesRevenue = 0
   let globalPromoterTodayOrderCount = 0
   let globalPromoterTodayItemCount = 0
@@ -330,7 +315,7 @@ export default function Home() {
     globalPromoterTodayItemCount += totalItemsDispatchedCount
   })
 
-  // Global Network-wide Top Performer computation lookup
+  // Global Network-wide top performer derived directly from raw material quantities
   let netEgg = 0, netWheat = 0, netIng3 = 0, netIng4 = 0, netIng5 = 0, netWater = 0
   allSalesHistory.forEach(s => {
     const d = s.created_at ? s.created_at.split('T')[0] : ''
@@ -343,15 +328,15 @@ export default function Home() {
       if (s.item_name === 'Water bottle') netWater += s.quantity_sold
     }
   })
-  const netTotalsMap = { 'Item 1': netEgg, 'Item 2': netWheat, 'Item 3': netIng3, 'Item 4': netIng4, 'Item 5': netIng5, 'Item 6': netWater }
+  const netTotalsMap = { 'ing1': netEgg, 'ing2': netWheat, 'Ing3': netIng3, 'Ing4': netIng4, 'Ing5': netIng5, 'Water bottle': netWater }
   let globalTopPerformer = 'None'
   let globalMax = 0
   Object.entries(netTotalsMap).forEach(([k, v]) => {
     if (v > globalMax) { globalMax = v; globalTopPerformer = k; }
   })
 
-  const currentTerminalStats = selectedOutlet ? getOutletSalesStatsForDateRange(selectedOutlet.id, liveOperatingDate, liveOperatingDate) : { salesAmountTotal: 0, transactionsLoggedCount: 0, totalItemsDispatchedCount: 0, highestName: 'None' }
-  const customPeriodTerminalStats = selectedOutlet ? getOutletSalesStatsForDateRange(selectedOutlet.id, outletPeriodStart, outletPeriodEnd) : { salesAmountTotal: 0, transactionsLoggedCount: 0, totalItemsDispatchedCount: 0, highestName: 'None' }
+  const currentTerminalStats = selectedOutlet ? getOutletSalesStatsForDateRange(selectedOutlet.id, liveOperatingDate, liveOperatingDate) : { salesAmountTotal: 0, transactionsLoggedCount: 0, totalItemsDispatchedCount: 0, highestIngredientName: 'None' }
+  const customPeriodTerminalStats = selectedOutlet ? getOutletSalesStatsForDateRange(selectedOutlet.id, outletPeriodStart, outletPeriodEnd) : { salesAmountTotal: 0, transactionsLoggedCount: 0, totalItemsDispatchedCount: 0, highestIngredientName: 'None' }
 
   if (currentMode === 'gate') {
     return (
@@ -413,8 +398,8 @@ export default function Home() {
 
             {/* RESTORED TOP PERFORMER BADGE PLACED CLEANLY NEXT TO TODAY'S REVENUE */}
             <div className="bg-gradient-to-r from-purple-950/40 to-blue-950/30 border border-purple-900/60 px-4 py-2 rounded-xl hidden md:block">
-              <span className="text-[9px] uppercase font-black text-purple-400 block tracking-widest">Outlet Top Performer</span>
-              <span className="text-xs font-extrabold text-white font-sans">{currentTerminalStats.highestName}</span>
+              <span className="text-[9px] uppercase font-black text-purple-400 block tracking-widest">Outlet Top Seller</span>
+              <span className="text-xs font-extrabold text-white font-sans uppercase">{currentTerminalStats.highestIngredientName}</span>
             </div>
           </div>
 
@@ -435,12 +420,12 @@ export default function Home() {
           </div>
         </header>
 
-        {/* 4 CLEAN TABS DESIGN IMPLEMENTATION ON THE OUTLET DESK VIEW */}
+        {/* 4 CLEAN ISOLATED TABS ON OUTLET VIEW */}
         <div className="flex flex-wrap gap-2 border-b border-slate-800 mb-6 pb-0.5">
           <button onClick={() => setOutletTab('counter')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${outletTab === 'counter' ? 'bg-slate-900 text-blue-400 border-b-2 border-blue-500' : 'text-slate-500 hover:text-slate-300'}`}>🛒 Menu Products / Punch Bill</button>
           <button onClick={() => setOutletTab('blueprint')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${outletTab === 'blueprint' ? 'bg-slate-900 text-teal-400 border-b-2 border-teal-500' : 'text-slate-500 hover:text-slate-300'}`}>📊 Live Inventory Blueprint</button>
-          <button onClick={() => setOutletTab('history')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${outletTab === 'history' ? 'bg-slate-900 text-emerald-400 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-300'}`}>🚚 Received Stock History Ledger</button>
-          <button onClick={() => setOutletTab('lookup')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${outletTab === 'lookup' ? 'bg-slate-900 text-amber-400 border-b-2 border-amber-500' : 'text-slate-500 hover:text-slate-300'}`}>📜 Outlet Sales History Lookup</button>
+          <button onClick={() => setOutletTab('history')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${outletTab === 'history' ? 'bg-slate-900 text-emerald-400 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-300'}`}>🚚 Received Stock Ledger</button>
+          <button onClick={() => setOutletTab('lookup')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${outletTab === 'lookup' ? 'bg-slate-900 text-amber-400 border-b-2 border-amber-500' : 'text-slate-500 hover:text-slate-300'}`}>📜 Sales History Lookup</button>
         </div>
 
         {outletTab === 'counter' && (
@@ -465,7 +450,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* LIVE INVENTORY BLUEPRINT WITH "RECEIVE SUPPLY" COLUMN SUCCESSFULLY DELETED */}
+        {/* LIVE INVENTORY BLUEPRINT - RECEIVE SUPPLY COLUMN DELETED CLEANLY */}
         {outletTab === 'blueprint' && (
           <div className="rounded-2xl bg-slate-900 p-6 border border-slate-800 max-w-3xl">
             <h2 className="text-xs font-bold text-teal-400 uppercase tracking-widest mb-4">Live Inventory Blueprint</h2>
@@ -561,16 +546,15 @@ export default function Home() {
             <p className="text-[10px] text-slate-400 font-mono mt-0.5 uppercase tracking-widest">Cross-Branch Analytics & Inventory Control Console</p>
           </div>
 
-          {/* REAL-TIME PROMOTER HERO VELOCITY BADGE */}
           <div className="bg-gradient-to-r from-amber-500/10 to-blue-500/5 border border-amber-500/20 px-4 py-2 rounded-xl hidden md:block">
             <span className="text-[9px] uppercase font-black text-amber-400 block tracking-widest">Network Top Performer</span>
-            <span className="text-xs font-black text-white font-sans">{globalTopPerformer}</span>
+            <span className="text-xs font-black text-white font-sans uppercase">{globalTopPerformer}</span>
           </div>
         </div>
         <button onClick={exitToGateway} className="rounded-lg bg-slate-850 px-4 py-2 text-xs font-bold text-slate-300 hover:bg-red-900 hover:text-white transition">Exit Portal</button>
       </header>
 
-      {/* THREE THEMED SUMMARY HEADER COUNTER BOXES */}
+      {/* TOP STATS BLOCKS MATCHING IMAGE 3 */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-slate-900 border border-slate-800/80 p-5 rounded-2xl shadow-lg">
           <span className="text-[10px] uppercase tracking-widest font-extrabold text-slate-500 block">Network Today Sales</span>
@@ -586,9 +570,9 @@ export default function Home() {
         </div>
       </div>
 
-      {/* PROMOTER SUB-DESK NAVIGATION TABS (Perfect match with your blueprints) */}
+      {/* PROMOTER DESK SELECTION TABS ROW */}
       <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-0.5">
-        <button onClick={() => setPromoterTab('overview')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition border-t-2 ${promoterTab === 'overview' ? 'bg-slate-900 text-blue-400 border-blue-500' : 'text-slate-500 border-transparent hover:text-slate-300'}`}>📊 Network Overview</button>
+        <button onClick={() => setPromoterTab('overview')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition border-t-2 ${promoterTab === 'overview' ? 'bg-slate-900 text-blue-400 border-blue-500' : 'text-slate-500 border-transparent hover:text-slate-300'}`}>🗂️ Network Overview</button>
         <button onClick={() => setPromoterTab('branches')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition border-t-2 ${promoterTab === 'branches' ? 'bg-slate-900 text-purple-400 border-blue-500' : 'text-slate-500 border-transparent hover:text-slate-300'}`}>🏪 Branch-by-Branch Matrix</button>
         <button onClick={() => setPromoterTab('revenue_matrix')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition border-t-2 ${promoterTab === 'revenue_matrix' ? 'bg-slate-900 text-emerald-400 border-emerald-500' : 'text-slate-500 border-transparent hover:text-slate-300'}`}>💰 Revenue Matrix</button>
         <button onClick={() => setPromoterTab('dispatch')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition border-t-2 ${promoterTab === 'dispatch' ? 'bg-slate-900 text-teal-400 border-teal-500' : 'text-slate-500 border-transparent hover:text-slate-300'}`}>📦 Stock Dispatch Desk</button>
@@ -671,11 +655,11 @@ export default function Home() {
                     <span className="font-bold text-emerald-400">${stats.salesAmountTotal.toLocaleString()}</span>
                   </div>
                   <div className="bg-slate-950/40 p-2 rounded border border-slate-800/60">
-                    <span className="text-[9px] font-sans text-slate-500 block">Orders</span>
+                    <span className="text-[9px] font-sans text-slate-500 block">Orders Done</span>
                     <span className="font-bold text-blue-400">{stats.transactionsLoggedCount}</span>
                   </div>
                   <div className="bg-slate-950/40 p-2 rounded border border-slate-800/60">
-                    <span className="text-[9px] font-sans text-slate-500 block">Items</span>
+                    <span className="text-[9px] font-sans text-slate-500 block">Raw Materials Consumed</span>
                     <span className="font-bold text-amber-500">{stats.totalItemsDispatchedCount}</span>
                   </div>
                 </div>
@@ -685,7 +669,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* REVENUE MATRIX TAB: Styled exactly like your laptop screen reference layout */}
+      {/* REVENUE MATRIX TAB - FIXED DIRECT STRING QUERY CALCULATION TO ELIMINATE THE 0 BUG */}
       {promoterTab === 'revenue_matrix' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {outlets.map(o => {
@@ -732,29 +716,26 @@ export default function Home() {
                     <span className="font-bold text-blue-400">{stats.transactionsLoggedCount}</span>
                   </div>
                   <div className="bg-slate-950/40 p-2 rounded border border-slate-800/60">
-                    <span className="text-[9px] font-sans text-slate-500 block">Menu Items</span>
+                    <span className="text-[9px] font-sans text-slate-500 block">Total Used</span>
                     <span className="font-bold text-amber-500">{stats.totalItemsDispatchedCount}</span>
                   </div>
                 </div>
 
                 <div className="bg-slate-950 rounded-xl px-3 py-1.5 border border-amber-500/10 text-center">
                   <span className="text-[10px] font-sans text-amber-400 font-bold block">
-                    🏆 Highest Velocity Seller: <span className="text-white font-mono font-black">{stats.highestName}</span>
+                    🏆 Highest Velocity Material: <span className="text-white font-mono font-black uppercase">{stats.highestIngredientName}</span>
                   </span>
                 </div>
 
+                {/* SCROLLABLE DATABASE RAW COMPONENT TIMELINE AUDITOR DESK */}
                 <div className="bg-slate-950 rounded-xl p-3 border border-slate-800 space-y-1 text-[11px] max-h-40 overflow-y-auto">
-                  <span className="text-[9px] text-emerald-400 uppercase font-bold tracking-wider block mb-1">Itemized Sales Dissection:</span>
-                  {menuItems.filter(m => !m.isCombo).map(prod => {
-                    const qtySold = stats.breakdownQuantities[prod.name] || 0;
-                    const revenueEarned = qtySold * prod.price;
+                  <span className="text-[9px] text-emerald-400 uppercase font-bold tracking-wider block mb-1">Ingredient Consumption Dissection:</span>
+                  {distinctIngredients.filter(ing => ing !== 'Boxes').map((ingName, idx) => {
+                    const qtyUsed = stats.rawIngredientQuantities[ingName] || 0;
                     return (
-                      <div key={prod.id} className="flex justify-between items-center font-mono text-slate-400 border-b border-slate-900 pb-1 pt-0.5 last:border-0">
-                        <span className="font-sans text-white truncate max-w-[130px]">{prod.name}</span>
-                        <div className="text-right space-x-2">
-                          <span className="text-emerald-400 font-bold">${revenueEarned.toLocaleString()}</span>
-                          <span className="text-slate-600 text-[10px]">({qtySold} qty)</span>
-                        </div>
+                      <div key={idx} className="flex justify-between items-center font-mono text-slate-400 border-b border-slate-900 pb-1 pt-0.5 last:border-0">
+                        <span className="font-sans text-white capitalize">{formatIngredientLabel(ingName)}</span>
+                        <span className="text-emerald-400 font-bold">{qtyUsed.toLocaleString()} units consumed</span>
                       </div>
                     )
                   })}
@@ -766,22 +747,45 @@ export default function Home() {
         </div>
       )}
 
+      {/* FULLY FUNCTIONAL STOCK DISPATCH DESK CONTROLLER */}
       {promoterTab === 'dispatch' && (
-        <section className="rounded-2xl bg-slate-900 border border-slate-800 p-6 shadow-xl space-y-4 max-w-5xl">
-          <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 pb-3 border-b border-slate-800">
-            <div className="flex gap-4 items-center">
-              <button onClick={() => setPromoterActiveTab('consumption')} className={`text-xs font-bold uppercase ${promoterActiveTab === 'consumption' ? 'text-blue-400' : 'text-slate-500'}`}>📊 Consumption Records</button>
-              <button onClick={() => setPromoterActiveTab('dispatches')} className={`text-xs font-bold uppercase ${promoterActiveTab === 'dispatches' ? 'text-emerald-400' : 'text-slate-500'}`}>🚚 Supply Dispatches</button>
+        <section className="rounded-2xl bg-slate-900 border border-slate-800 p-6 shadow-xl space-y-4 max-w-xl">
+          <div>
+            <h2 className="text-sm font-bold text-teal-400 uppercase tracking-widest">Master Stock Dispatch Desk</h2>
+            <p className="text-[11px] text-slate-400 font-sans mt-0.5">Issue inventory drop deliveries across locations directly from central command</p>
+          </div>
+
+          <div className="space-y-3 pt-2">
+            <div className="flex flex-col space-y-1 text-xs">
+              <span className="text-slate-400 font-bold">Target Destination Location:</span>
+              <select value={dispatchOutlet} onChange={(e) => setDispatchOutlet(e.target.value)} className="bg-slate-950 border border-slate-700 text-white rounded p-2.5 font-bold outline-none focus:border-teal-500">
+                {outlets.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
             </div>
-          </header>
-          <p className="text-xs font-mono text-slate-400">Distribution pipeline tracking tools run active inside deployment frames.</p>
+
+            <div className="flex flex-col space-y-1 text-xs">
+              <span className="text-slate-400 font-bold">Material Item Classification:</span>
+              <select value={dispatchIngredient} onChange={(e) => setDispatchIngredient(e.target.value)} className="bg-slate-950 border border-slate-700 text-white rounded p-2.5 font-bold outline-none focus:border-teal-500">
+                {distinctIngredients.map((ing, idx) => <option key={idx} value={ing}>{formatIngredientLabel(ing)}</option>)}
+              </select>
+            </div>
+
+            <div className="flex flex-col space-y-1 text-xs">
+              <span className="text-slate-400 font-bold">Dispatch Unit Quantity Volume:</span>
+              <input type="number" placeholder="Enter quantity to add..." value={dispatchQty || ''} onChange={(e) => setDispatchQty(Number(e.target.value))} className="bg-slate-950 border border-slate-700 text-teal-400 rounded p-2.5 font-mono font-black text-sm outline-none focus:border-teal-500" />
+            </div>
+
+            <button onClick={handleExecuteDispatch} className="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs uppercase tracking-wider py-3 rounded-xl transition mt-2">
+              🚚 Log Central Supply Dispatch
+            </button>
+          </div>
         </section>
       )}
 
       {promoterTab === 'security' && (
         <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-2xl">
           <h3 className="text-sm font-bold text-red-400 uppercase tracking-wider mb-2">Terminal Access Lock Desk</h3>
-          <p className="text-xs text-slate-400 font-sans">Multi-terminal active monitoring nodes update here dynamically.</p>
+          <p className="text-xs text-slate-400 font-sans">Multi-terminal active verification locks are mapped secure within central parameters.</p>
         </section>
       )}
     </main>

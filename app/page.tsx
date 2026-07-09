@@ -17,7 +17,7 @@ const OUTLETS = [
 
 const PROMOTER_PASS = 'master@omkar';
 
-// Recipes matching your exact ing1, ing2 system
+// Recipes matching your exact database setup
 const MENU_ITEMS = [
   { name: 'Item 1', type: 'STANDALONE ITEM', price: 10, recipe: { ing1: 2, ing2: 1, ing3: 0, waterbottle: 0, box: 1 } },
   { name: 'Item 2', type: 'STANDALONE ITEM', price: 12, recipe: { ing1: 1, ing2: 2, ing3: 0, waterbottle: 0, box: 1 } },
@@ -87,7 +87,7 @@ export default function OmkarEnterpriseApp() {
   };
 
   // ==========================================
-  // 4. CORE ENGINE OPERATIONS (MATCHING COLS)
+  // 4. CORE ENGINE OPERATIONS
   // ==========================================
   const handlePunchOrder = async () => {
     if (!session || session.type !== 'OUTLET') return;
@@ -101,7 +101,6 @@ export default function OmkarEnterpriseApp() {
     setOrderLoading(true);
     const insertions: any[] = [];
 
-    // Loop through each item in the check and write rows directly matching your database layout
     chosenItems.forEach(menuItem => {
       const qty = orderQuantities[menuItem.name] || 0;
 
@@ -109,12 +108,11 @@ export default function OmkarEnterpriseApp() {
         outlet_id: session.id,
         item_name: menuItem.name,
         quantity_sold: qty,
-        // Map recipes directly to your fixed database columns
         eggs_consumed: menuItem.recipe.ing1 * qty,
         wheat_consumed: menuItem.recipe.ing2 * qty,
         ing3_consumed: menuItem.recipe.ing3 * qty,
         waterbottle_consumed: menuItem.recipe.waterbottle * qty,
-        box_consumed: menuItem.recipe.box * qty
+        boxes_consumed: menuItem.recipe.box * qty
       });
     });
 
@@ -181,7 +179,7 @@ export default function OmkarEnterpriseApp() {
   };
 
   // ==========================================
-  // 5. METRIC CORES
+  // 5. ANALYTICS RESOLVERS
   // ==========================================
   const calculateMetricsForSet = (filteredSales: any[]) => {
     let revenue = 0;
@@ -262,9 +260,7 @@ export default function OmkarEnterpriseApp() {
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4" style={{ fontFamily: 'monospace' }}>
         <div className="w-full max-w-md bg-slate-900 border border-cyan-500/30 rounded-lg p-6 shadow-2xl shadow-cyan-500/10">
           <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500 uppercase">
-              Omkar Enterprise Gateway
-            </h1>
+            <h1 className="text-2xl font-bold tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500 uppercase">Omkar Enterprise Gateway</h1>
             <p className="text-xs text-slate-400 mt-2">SECURE PORTAL MANAGEMENT ACCESS NODE</p>
           </div>
 
@@ -284,9 +280,7 @@ export default function OmkarEnterpriseApp() {
 
             {loginError && <p className="text-xs text-rose-500 font-bold bg-rose-950/30 border border-rose-500/40 rounded p-2 text-center">{loginError}</p>}
 
-            <button type="submit" className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-sm font-bold uppercase py-2.5 rounded tracking-widest shadow-lg transition">
-              Establish Uplink
-            </button>
+            <button type="submit" className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-sm font-bold uppercase py-2.5 rounded tracking-widest shadow-lg transition">Establish Uplink</button>
           </form>
         </div>
       </div>
@@ -301,14 +295,13 @@ export default function OmkarEnterpriseApp() {
       const base = INITIAL_BASE_STOCK[itemName] || 0;
       const sent = outletReps.filter(r => r.item_name === itemName).reduce((acc, curr) => acc + Number(curr.quantity_added), 0);
       
-      // Calculate consumed inventory from exact fixed database columns
       let used = 0;
       outletSalesRaw.forEach(row => {
         if (itemName === 'ing1') used += Number(row.eggs_consumed || 0);
         if (itemName === 'ing2') used += Number(row.wheat_consumed || 0);
         if (itemName === 'ing3') used += Number(row.ing3_consumed || 0);
         if (itemName === 'waterbottle') used += Number(row.waterbottle_consumed || 0);
-        if (itemName === 'box') used += Number(row.box_consumed || 0);
+        if (itemName === 'box') used += Number(row.boxes_consumed || 0);
       });
 
       return { itemName, available: base + sent - used };
@@ -342,9 +335,7 @@ export default function OmkarEnterpriseApp() {
                 <p className="text-[10px] text-slate-500 uppercase font-bold">Order Count</p>
                 <p className="text-sm font-bold text-cyan-400">{liveOutletMetrics.orderCount} checks</p>
               </div>
-              <button onClick={handleLogout} className="col-span-2 sm:col-span-1 border border-rose-500/30 bg-rose-950/20 text-rose-400 hover:bg-rose-500 hover:text-white px-4 py-2 rounded text-xs font-bold uppercase transition tracking-wider self-center">
-                Logout
-              </button>
+              <button onClick={handleLogout} className="col-span-2 sm:col-span-1 border border-rose-500/30 bg-rose-950/20 text-rose-400 hover:bg-rose-500 hover:text-white px-4 py-2 rounded text-xs font-bold uppercase transition tracking-wider self-center">Logout</button>
             </div>
           </div>
         </header>
@@ -357,9 +348,7 @@ export default function OmkarEnterpriseApp() {
               { id: 'RECEIVED', label: 'Received Stock History' },
               { id: 'REVENUE', label: 'Revenue & Item Breakdown' },
             ].map(tab => (
-              <button key={tab.id} onClick={() => setOutletTab(tab.id as any)} className={`px-4 py-3 text-xs font-bold tracking-wider uppercase border-b-2 whitespace-nowrap transition ${outletTab === tab.id ? 'border-cyan-500 text-cyan-400 bg-cyan-950/10' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>
-                {tab.label}
-              </button>
+              <button key={tab.id} onClick={() => setOutletTab(tab.id as any)} className={`px-4 py-3 text-xs font-bold tracking-wider uppercase border-b-2 whitespace-nowrap transition ${outletTab === tab.id ? 'border-cyan-500 text-cyan-400 bg-cyan-950/10' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>{tab.label}</button>
             ))}
           </div>
         </div>
@@ -388,9 +377,7 @@ export default function OmkarEnterpriseApp() {
               </div>
 
               <div className="flex justify-end">
-                <button onClick={handlePunchOrder} disabled={orderLoading} className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold tracking-widest text-sm uppercase px-8 py-3 rounded-lg shadow-xl transition disabled:opacity-50">
-                  {orderLoading ? 'TRANSMITTING ORDER...' : '⚡ Punch Order Check'}
-                </button>
+                <button onClick={handlePunchOrder} disabled={orderLoading} className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold tracking-widest text-sm uppercase px-8 py-3 rounded-lg shadow-xl transition disabled:opacity-50">{orderLoading ? 'TRANSMITTING ORDER...' : '⚡ Punch Order Check'}</button>
               </div>
             </div>
           )}
@@ -557,9 +544,7 @@ export default function OmkarEnterpriseApp() {
               { id: 'BRANCH_REVENUE', label: '💰 Revenue Matrix (Financials)' },
               { id: 'STOCK_DISPATCH', label: '🚀 Stock Dispatched' },
             ].map(tab => (
-              <button key={tab.id} onClick={() => setPromoterTab(tab.id as any)} className={`px-4 py-3 text-xs font-bold tracking-wider uppercase border-b-2 whitespace-nowrap transition ${promoterTab === tab.id ? 'border-orange-500 text-orange-400 bg-orange-950/10' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>
-                {tab.label}
-              </button>
+              <button key={tab.id} onClick={() => setPromoterTab(tab.id as any)} className={`px-4 py-3 text-xs font-bold tracking-wider uppercase border-b-2 whitespace-nowrap transition ${promoterTab === tab.id ? 'border-orange-500 text-orange-400 bg-orange-950/10' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>{tab.label}</button>
             ))}
           </div>
         </div>

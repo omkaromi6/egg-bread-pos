@@ -119,7 +119,6 @@ export default function OmkarEnterpriseApp() {
     }
 
     setOrderLoading(true);
-    const uniqueOrderGroupId = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
     const insertions: any[] = [];
 
     chosenItems.forEach(menuItem => {
@@ -129,8 +128,7 @@ export default function OmkarEnterpriseApp() {
       insertions.push({
         outlet_id: session.id,
         item_name: menuItem.name,
-        quantity_sold: qty,
-        order_group_id: uniqueOrderGroupId
+        quantity_sold: qty
       });
 
       // Log 2: The Ingredients Breakdown (Fixes Live Inventory Blueprint calculations)
@@ -138,8 +136,7 @@ export default function OmkarEnterpriseApp() {
         insertions.push({
           outlet_id: session.id,
           item_name: ingredientName,
-          quantity_sold: ingredientQtyPerUnit * qty,
-          order_group_id: uniqueOrderGroupId
+          quantity_sold: ingredientQtyPerUnit * qty
         });
       });
     });
@@ -227,7 +224,12 @@ export default function OmkarEnterpriseApp() {
         
         itemVolMap[row.item_name] = (itemVolMap[row.item_name] || 0) + row.quantity_sold;
         itemRevMap[row.item_name] = (itemRevMap[row.item_name] || 0) + itemGross;
-        if (row.order_group_id) ordersSet.add(row.order_group_id);
+        
+        // Groups orders safely using matching timestamps
+        if (row.created_at) {
+          const uniqueOrderKey = `${row.outlet_id}-${row.created_at}`;
+          ordersSet.add(uniqueOrderKey);
+        }
       }
     });
 
@@ -864,4 +866,3 @@ export default function OmkarEnterpriseApp() {
     );
   }
 }
-

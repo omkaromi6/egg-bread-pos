@@ -17,27 +17,31 @@ const OUTLETS = [
 
 const PROMOTER_PASS = 'master@omkar';
 
-// Recipes aligned precisely with your menu layout names and your table's eggs metric
+// Comprehensive 7-Material Abstract Recipe Engine
 const MENU_ITEMS = [
-  { name: 'Item 1', type: 'STANDALONE ITEM', price: 10, recipe: { ing1: 2, ing2: 1, ing3: 0, waterbottle: 0, box: 1 } },
-  { name: 'Item 2', type: 'STANDALONE ITEM', price: 12, recipe: { ing1: 1, ing2: 2, ing3: 0, waterbottle: 0, box: 1 } },
-  { name: 'Item 3', type: 'STANDALONE ITEM', price: 15, recipe: { ing1: 2, ing2: 2, ing3: 0, waterbottle: 0, box: 1 } },
-  { name: 'Item 4', type: 'STANDALONE ITEM', price: 18, recipe: { ing1: 3, ing2: 1, ing3: 0, waterbottle: 0, box: 1 } },
-  { name: 'Item 5', type: 'STANDALONE ITEM', price: 20, recipe: { ing1: 2, ing2: 3, ing3: 0, waterbottle: 0, box: 1 } },
-  { name: 'Item 6', type: 'STANDALONE ITEM', price: 25, recipe: { ing1: 4, ing2: 2, ing3: 0, waterbottle: 0, box: 1 } },
-  { name: 'Combo 1', type: 'COMBO VARIANT', price: 35, recipe: { ing1: 4, ing2: 3, ing3: 0, waterbottle: 1, box: 2 } },
-  { name: 'Combo 2', type: 'COMBO VARIANT', price: 42, recipe: { ing1: 5, ing2: 4, ing3: 0, waterbottle: 1, box: 2 } },
-  { name: 'Combo 3', type: 'COMBO VARIANT', price: 50, recipe: { ing1: 6, ing2: 5, ing3: 0, waterbottle: 2, box: 3 } },
-  { name: 'Combo 4', type: 'COMBO VARIANT', price: 60, recipe: { ing1: 8, ing2: 6, ing3: 0, waterbottle: 2, box: 4 } },
+  { name: 'Item 1', type: 'STANDALONE ITEM', price: 10, recipe: { ing1: 2, ing2: 1, ing3: 0, ing4: 0, ing5: 0, waterbottle: 0, box: 1 } },
+  { name: 'Item 2', type: 'STANDALONE ITEM', price: 12, recipe: { ing1: 1, ing2: 2, ing3: 0, ing4: 1, ing5: 0, waterbottle: 0, box: 1 } },
+  { name: 'Item 3', type: 'STANDALONE ITEM', price: 15, recipe: { ing1: 2, ing2: 2, ing3: 1, ing4: 0, ing5: 1, waterbottle: 0, box: 1 } },
+  { name: 'Item 4', type: 'STANDALONE ITEM', price: 18, recipe: { ing1: 3, ing2: 1, ing3: 0, ing4: 2, ing5: 0, waterbottle: 0, box: 1 } },
+  { name: 'Item 5', type: 'STANDALONE ITEM', price: 20, recipe: { ing1: 2, ing2: 3, ing3: 1, ing4: 0, ing5: 2, waterbottle: 0, box: 1 } },
+  { name: 'Item 6', type: 'STANDALONE ITEM', price: 25, recipe: { ing1: 4, ing2: 2, ing3: 2, ing4: 1, ing5: 1, waterbottle: 0, box: 1 } },
+  { name: 'Combo 1', type: 'COMBO VARIANT', price: 35, recipe: { ing1: 4, ing2: 3, ing3: 1, ing4: 2, ing5: 1, waterbottle: 1, box: 2 } },
+  { name: 'Combo 2', type: 'COMBO VARIANT', price: 42, recipe: { ing1: 5, ing2: 4, ing3: 2, ing4: 1, ing5: 2, waterbottle: 1, box: 2 } },
+  { name: 'Combo 3', type: 'COMBO VARIANT', price: 50, recipe: { ing1: 6, ing2: 5, ing3: 2, ing4: 3, ing5: 2, waterbottle: 2, box: 3 } },
+  { name: 'Combo 4', type: 'COMBO VARIANT', price: 60, recipe: { ing1: 8, ing2: 6, ing3: 3, ing4: 2, ing5: 3, waterbottle: 2, box: 4 } },
 ];
 
-const RAW_ITEMS = ['ing1', 'ing2', 'ing3', 'waterbottle', 'box'];
+const RAW_ITEMS = ['ing1', 'ing2', 'ing3', 'ing4', 'ing5', 'waterbottle', 'box'];
+
+// Hardcoded starting baselines matching original grid setup values
 const INITIAL_BASE_STOCK: Record<string, number> = {
-  ing1: 500,
-  ing2: 300,
-  ing3: 100,
-  waterbottle: 100,
-  box: 200
+  ing1: 1500,
+  ing2: 1500,
+  ing3: 500,
+  ing4: 300,
+  ing5: 700,
+  waterbottle: 2000,
+  box: 300
 };
 
 const formatCurrency = (val: number) => `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -51,7 +55,7 @@ export default function OmkarEnterpriseApp() {
   const [loginError, setLoginError] = useState('');
 
   const [outletTab, setOutletTab] = useState<'MENU' | 'INVENTORY' | 'RECEIVED' | 'REVENUE'>('MENU');
-  const [promoterTab, setPromoterTab] = useState<'OVERVIEW' | 'BRANCH_ITEMS' | 'BRANCH_REVENUE' | 'STOCK_DISPATCH'>('OVERVIEW');
+  const [promoterTab, setPromoterTab] = useState<'OVERVIEW' | 'BRANCH_ITEMS' | 'BRANCH_REVENUE' | 'GLOBAL_MATRICES' | 'STOCK_DISPATCH'>('OVERVIEW');
 
   const [salesHistory, setSalesHistory] = useState<any[]>([]);
   const [replenishments, setReplenishments] = useState<any[]>([]);
@@ -62,6 +66,9 @@ export default function OmkarEnterpriseApp() {
   
   const [promoterDateFrom, setPromoterDateFrom] = useState(getISODateOnly(new Date(new Date().setDate(new Date().getDate() - 7))));
   const [promoterDateTo, setPromoterDateTo] = useState(getISODateOnly(new Date()));
+  
+  const [globalMatDateFrom, setGlobalMatDateFrom] = useState(getISODateOnly(new Date(new Date().setDate(new Date().getDate() - 7))));
+  const [globalMatDateTo, setGlobalMatDateTo] = useState(getISODateOnly(new Date()));
 
   const [dispatchOutlet, setDispatchOutlet] = useState<number>(1);
   const [dispatchItem, setDispatchItem] = useState<string>('ing1');
@@ -86,9 +93,12 @@ export default function OmkarEnterpriseApp() {
     if (reps) setReplenishments(reps);
   };
 
-  // ==========================================
-  // 4. CORE DATA INTERFACES
-  // ==========================================
+  // Live Order Value Calculator
+  const currentOrderValue = MENU_ITEMS.reduce((sum, item) => {
+    const qty = orderQuantities[item.name] || 0;
+    return sum + (item.price * qty);
+  }, 0);
+
   const handlePunchOrder = async () => {
     if (!session || session.type !== 'OUTLET') return;
     
@@ -103,8 +113,6 @@ export default function OmkarEnterpriseApp() {
 
     chosenItems.forEach(menuItem => {
       const qty = orderQuantities[menuItem.name] || 0;
-
-      // Aligns precisely with the columns verified from your SQL schema results window
       insertions.push({
         outlet_id: session.id,
         item_name: menuItem.name,
@@ -120,7 +128,7 @@ export default function OmkarEnterpriseApp() {
       alert(`Order transmission error: ${error.message}`);
     } else {
       setOrderQuantities({});
-      alert('Order punched successfully! Real-time screens synchronized.');
+      alert('Order punched successfully!');
       fetchData();
     }
   };
@@ -176,7 +184,7 @@ export default function OmkarEnterpriseApp() {
   };
 
   // ==========================================
-  // 5. CALCULATIONS ENGINE
+  // 5. INVENTORY & METRICS ENGINES
   // ==========================================
   const calculateMetricsForSet = (filteredSales: any[]) => {
     let revenue = 0;
@@ -191,53 +199,69 @@ export default function OmkarEnterpriseApp() {
         const itemGross = menuRef.price * row.quantity_sold;
         revenue += itemGross;
         itemsCount += row.quantity_sold;
-        
         itemVolMap[row.item_name] = (itemVolMap[row.item_name] || 0) + row.quantity_sold;
         itemRevMap[row.item_name] = (itemRevMap[row.item_name] || 0) + itemGross;
-        
-        if (row.created_at) {
-          ordersSet.add(`${row.outlet_id}-${row.created_at}`);
-        }
+        if (row.created_at) ordersSet.add(`${row.outlet_id}-${row.created_at}`);
       }
     });
 
-    let topPerf = 'None';
-    let topVol = 0;
-    let leastPerf = 'None';
-    let leastVol = Infinity;
-
-    let highestRevItem = 'None';
-    let highestRevVal = 0;
-    let lowestRevItem = 'None';
-    let lowestRevVal = Infinity;
+    let topPerf = 'None'; let topVol = 0;
+    let leastPerf = 'None'; let leastVol = Infinity;
+    let highestRevItem = 'None'; let highestRevVal = 0;
+    let lowestRevItem = 'None'; let lowestRevVal = Infinity;
 
     MENU_ITEMS.forEach(m => {
       const v = itemVolMap[m.name] || 0;
       const r = itemRevMap[m.name] || 0;
-
       if (v > topVol) { topVol = v; topPerf = `${m.name} (${v} units)`; }
       if (v > 0 && v < leastVol) { leastVol = v; leastPerf = `${m.name} (${v} units)`; }
-
       if (r > highestRevVal) { highestRevVal = r; highestRevItem = `${m.name} (${formatCurrency(r)})`; }
       if (r > 0 && r < lowestRevVal) { lowestRevVal = r; lowestRevItem = `${m.name} (${formatCurrency(r)})`; }
     });
 
     return {
-      revenue,
-      orderCount: ordersSet.size,
-      itemsCount,
-      topPerf,
+      revenue, orderCount: ordersSet.size, itemsCount, topPerf,
       leastPerf: leastPerf === 'None' || leastVol === Infinity ? 'None' : leastPerf,
-      highestRevItem,
-      lowestRevItem: lowestRevItem === 'None' || lowestRevVal === Infinity ? 'None' : lowestRevItem,
-      itemVolMap,
-      itemRevMap
+      highestRevItem, lowestRevItem: lowestRevItem === 'None' || lowestRevVal === Infinity ? 'None' : lowestRevItem,
+      itemVolMap, itemRevMap
     };
+  };
+
+  const buildAutomatedInventoryMatrix = (outletId: number, targetSales: any[], targetReps: any[]) => {
+    const currentMonthStart = new Date();
+    currentMonthStart.setDate(1);
+    currentMonthStart.setHours(0,0,0,0);
+
+    return RAW_ITEMS.map(itemName => {
+      const initialBase = INITIAL_BASE_STOCK[itemName] || 0;
+      
+      const historicalReps = targetReps.filter(r => r.outlet_id === outletId && r.item_name === itemName && new Date(r.created_at) < currentMonthStart);
+      const activeMonthReps = targetReps.filter(r => r.outlet_id === outletId && r.item_name === itemName && new Date(r.created_at) >= currentMonthStart);
+      
+      const historicalRepTotal = historicalReps.reduce((acc, curr) => acc + Number(curr.quantity_added), 0);
+      const activeMonthRepTotal = activeMonthReps.reduce((acc, curr) => acc + Number(curr.quantity_added), 0);
+      
+      const stock1st = initialBase + historicalRepTotal;
+
+      let usedToday = 0;
+      targetSales.forEach(row => {
+        if (row.outlet_id === outletId) {
+          const itemRef = MENU_ITEMS.find(m => m.name === row.item_name);
+          if (itemRef && itemRef.recipe) {
+            const usagePerUnit = (itemRef.recipe as Record<string, number>)[itemName] || 0;
+            usedToday += usagePerUnit * Number(row.quantity_sold || 0);
+          }
+        }
+      });
+
+      const stockLeft = stock1st + activeMonthRepTotal - usedToday;
+
+      return { itemName, stock1st, usedToday, stockLeft };
+    });
   };
 
   const todayISO = getISODateOnly(new Date());
   const todaySalesData = salesHistory.filter(s => getISODateOnly(new Date(s.created_at)) === todayISO);
-
   const liveNetworkMetrics = calculateMetricsForSet(todaySalesData);
   const liveOutletMetrics = calculateMetricsForSet(todaySalesData.filter(s => s.outlet_id === session?.id));
 
@@ -260,7 +284,6 @@ export default function OmkarEnterpriseApp() {
             <h1 className="text-2xl font-bold tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500 uppercase">Omkar Enterprise Gateway</h1>
             <p className="text-xs text-slate-400 mt-2">SECURE PORTAL MANAGEMENT ACCESS NODE</p>
           </div>
-
           <form onSubmit={handleLogin} className="space-y-6">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Select Access Node</label>
@@ -269,14 +292,11 @@ export default function OmkarEnterpriseApp() {
                 <option value={7}>👑 Promoter Operations Command Center</option>
               </select>
             </div>
-
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Security Authorization Lock</label>
               <input type="password" placeholder="••••••••" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500 placeholder-slate-700"/>
             </div>
-
             {loginError && <p className="text-xs text-rose-500 font-bold bg-rose-950/30 border border-rose-500/40 rounded p-2 text-center">{loginError}</p>}
-
             <button type="submit" className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-sm font-bold uppercase py-2.5 rounded tracking-widest shadow-lg transition">Establish Uplink</button>
           </form>
         </div>
@@ -285,26 +305,15 @@ export default function OmkarEnterpriseApp() {
   }
 
   if (session.type === 'OUTLET') {
-    const outletSalesRaw = salesHistory.filter(s => s.outlet_id === session.id);
-    const outletReps = replenishments.filter(r => r.outlet_id === session.id);
+    const currentMonthStart = new Date();
+    currentMonthStart.setDate(1);
+    currentMonthStart.setHours(0,0,0,0);
 
-    const computedInventory = RAW_ITEMS.map(itemName => {
-      const base = INITIAL_BASE_STOCK[itemName] || 0;
-      const sent = outletReps.filter(r => r.item_name === itemName).reduce((acc, curr) => acc + Number(curr.quantity_added), 0);
-      
-      let used = 0;
-      outletSalesRaw.forEach(row => {
-        if (itemName === 'ing1') used += Number(row.eggs_consumed || 0);
-        // Fallbacks for simulated secondary items inside the client application view wrapper
-        if (itemName === 'ing2') used += Number(row.quantity_sold * 1 || 0);
-        if (itemName === 'box') used += Number(row.quantity_sold * 1 || 0);
-      });
-
-      return { itemName, available: base + sent - used };
-    });
-
+    const monthSales = salesHistory.filter(s => s.outlet_id === session.id && new Date(s.created_at) >= currentMonthStart);
+    const outletInventory = buildAutomatedInventoryMatrix(session.id!, monthSales, replenishments);
     const rangeOutletSales = filterByRange(salesHistory, outletDateFrom, outletDateTo, session.id);
     const rangeOutletMetrics = calculateMetricsForSet(rangeOutletSales);
+    const outletReps = replenishments.filter(r => r.outlet_id === session.id);
 
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col" style={{ fontFamily: 'monospace' }}>
@@ -317,7 +326,6 @@ export default function OmkarEnterpriseApp() {
               </div>
               <p className="text-xs text-slate-400 mt-0.5">{getTodayDateString()}</p>
             </div>
-
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 w-full md:w-auto text-center">
               <div className="bg-slate-950 border border-slate-800 rounded px-3 py-1.5">
                 <p className="text-[10px] text-slate-500 uppercase font-bold">Today Revenue</p>
@@ -371,9 +379,12 @@ export default function OmkarEnterpriseApp() {
                   ))}
                 </div>
               </div>
-
-              <div className="flex justify-end">
-                <button onClick={handlePunchOrder} disabled={orderLoading} className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold tracking-widest text-sm uppercase px-8 py-3 rounded-lg shadow-xl transition disabled:opacity-50">{orderLoading ? 'TRANSMITTING ORDER...' : '⚡ Punch Order Check'}</button>
+              <div className="flex justify-end items-center gap-4 bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-xl">
+                <div className="text-right">
+                  <span className="text-xs font-bold text-slate-500 block uppercase tracking-wider">Present Order Value</span>
+                  <span className="text-xl font-bold text-emerald-400">{formatCurrency(currentOrderValue)}</span>
+                </div>
+                <button onClick={handlePunchOrder} disabled={orderLoading || currentOrderValue === 0} className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold tracking-widest text-sm uppercase px-8 py-3 rounded-lg transition disabled:opacity-40">{orderLoading ? 'TRANSMITTING...' : '⚡ Punch Order Check'}</button>
               </div>
             </div>
           )}
@@ -385,17 +396,19 @@ export default function OmkarEnterpriseApp() {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400 font-bold bg-slate-950/40">
-                      <th className="p-3">Raw Material Item Variant</th>
-                      <th className="p-3">Calculation Mechanics Formula</th>
-                      <th className="p-3 text-right">Available Stock Balance</th>
+                      <th className="p-3">Material</th>
+                      <th className="p-3 text-center">Stock 1st</th>
+                      <th className="p-3 text-center">Used Today</th>
+                      <th className="p-3 text-right">Stock Left</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800 text-sm">
-                    {computedInventory.map(row => (
+                    {outletInventory.map(row => (
                       <tr key={row.itemName} className="hover:bg-slate-950/20">
                         <td className="p-3 font-bold text-slate-300">{row.itemName}</td>
-                        <td className="p-3 text-xs text-slate-500">Initial Base Stock + Dispatched Supplies (From Promoter Dashboard) - Ingredient Usage Log</td>
-                        <td className={`p-3 text-right font-bold ${row.available < 50 ? 'text-rose-400 animate-pulse' : 'text-emerald-400'}`}>{row.available.toLocaleString()} units</td>
+                        <td className="p-3 text-center text-slate-400 font-bold">{row.stock1st.toLocaleString()}</td>
+                        <td className="p-3 text-center text-orange-400 font-bold">{row.usedToday.toLocaleString()}</td>
+                        <td className={`p-3 text-right font-bold ${row.stockLeft < 100 ? 'text-rose-400 animate-pulse' : 'text-emerald-400'}`}>{row.stockLeft.toLocaleString()} units</td>
                       </tr>
                     ))}
                   </tbody>
@@ -447,7 +460,6 @@ export default function OmkarEnterpriseApp() {
                   <input type="date" value={outletDateTo} onChange={(e) => setOutletDateTo(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-slate-300 focus:outline-none"/>
                 </div>
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 text-center">
                   <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">Period Total Revenue</p>
@@ -462,7 +474,6 @@ export default function OmkarEnterpriseApp() {
                   <p className="text-2xl font-bold text-cyan-400">{rangeOutletMetrics.orderCount} checks</p>
                 </div>
               </div>
-
               <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
                 <h4 className="text-xs font-bold uppercase text-slate-400 tracking-widest mb-4">Itemized Sales Dissection Sheet</h4>
                 <div className="overflow-x-auto">
@@ -513,7 +524,6 @@ export default function OmkarEnterpriseApp() {
               <h1 className="text-lg font-bold tracking-widest text-orange-500 uppercase flex items-center gap-2">👑 Omkar Enterprise Command Dashboard</h1>
               <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mt-0.5">GLOBAL REAL-TIME INTEGRATED NETWORK HUB</p>
             </div>
-
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full lg:w-auto text-center">
               <div className="bg-slate-950 border border-slate-800 rounded px-3 py-1.5">
                 <p className="text-[9px] text-slate-500 uppercase font-bold">Today Revenue (All 6)</p>
@@ -538,6 +548,7 @@ export default function OmkarEnterpriseApp() {
               { id: 'OVERVIEW', label: '📊 Network Overview' },
               { id: 'BRANCH_ITEMS', label: '📦 Branch-by-Branch Matrix (Items)' },
               { id: 'BRANCH_REVENUE', label: '💰 Revenue Matrix (Financials)' },
+              { id: 'GLOBAL_MATRICES', label: '🎛️ Global Material Matrices' },
               { id: 'STOCK_DISPATCH', label: '🚀 Stock Dispatched' },
             ].map(tab => (
               <button key={tab.id} onClick={() => setPromoterTab(tab.id as any)} className={`px-4 py-3 text-xs font-bold tracking-wider uppercase border-b-2 whitespace-nowrap transition ${promoterTab === tab.id ? 'border-orange-500 text-orange-400 bg-orange-950/10' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>{tab.label}</button>
@@ -546,7 +557,7 @@ export default function OmkarEnterpriseApp() {
         </div>
 
         <main className="flex-1 max-w-7xl w-full mx-auto p-4 space-y-6">
-          {promoterTab !== 'STOCK_DISPATCH' && (
+          {promoterTab !== 'STOCK_DISPATCH' && promoterTab !== 'GLOBAL_MATRICES' && (
             <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-wrap items-center justify-between gap-4">
               <div>
                 <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest">Network Analytics Audit Filter</h3>
@@ -576,7 +587,6 @@ export default function OmkarEnterpriseApp() {
                   <p className="text-2xl font-bold text-orange-400">{rangeNetworkMetrics.itemsCount} units</p>
                 </div>
               </div>
-
               <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
                 <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest mb-4">Global Menu & Combo Dissection Matrix</h3>
                 <div className="overflow-x-auto">
@@ -673,6 +683,55 @@ export default function OmkarEnterpriseApp() {
             </div>
           )}
 
+          {promoterTab === 'GLOBAL_MATRICES' && (
+            <div className="space-y-6">
+              <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest">Global Branches Material Matrices Audit</h3>
+                  <p className="text-[11px] text-slate-500 mt-1">Isolates raw metrics of all 6 outlets simultaneously over a targeted boundary</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input type="date" value={globalMatDateFrom} onChange={(e) => setGlobalMatDateFrom(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-slate-300 focus:outline-none"/>
+                  <span className="text-xs text-slate-500 font-bold">TO</span>
+                  <input type="date" value={globalMatDateTo} onChange={(e) => setGlobalMatDateTo(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-slate-300 focus:outline-none"/>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                {OUTLETS.map(outlet => {
+                  const rangeSales = filterByRange(salesHistory, globalMatDateFrom, globalMatDateTo, outlet.id);
+                  const matrix = buildAutomatedInventoryMatrix(outlet.id, rangeSales, replenishments);
+                  return (
+                    <div key={outlet.id} className="bg-slate-900 border border-slate-800 rounded-lg p-4">
+                      <h4 className="text-xs font-bold uppercase text-orange-400 tracking-widest border-b border-slate-800 pb-2 mb-3">{outlet.name} Operational Stock Breakdown</h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="border-b border-slate-800 tracking-wider text-slate-400 font-bold uppercase bg-slate-950/30">
+                              <th className="p-2">Material</th>
+                              <th className="p-2 text-center">Stock 1st</th>
+                              <th className="p-2 text-center">Used (Period)</th>
+                              <th className="p-2 text-right">Estimated Left</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/50">
+                            {matrix.map(row => (
+                              <tr key={row.itemName} className="hover:bg-slate-950/20">
+                                <td className="p-2 font-bold text-slate-300">{row.itemName}</td>
+                                <td className="p-2 text-center text-slate-400">{row.stock1st.toLocaleString()}</td>
+                                <td className="p-2 text-center text-orange-400 font-bold">{row.usedToday.toLocaleString()}</td>
+                                <td className="p-2 text-right font-bold text-emerald-400">{row.stockLeft.toLocaleString()} units</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {promoterTab === 'STOCK_DISPATCH' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 h-fit">
@@ -695,11 +754,10 @@ export default function OmkarEnterpriseApp() {
                     <input type="number" placeholder="Enter mass units" value={dispatchQty} onChange={(e) => setDispatchQty(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-xs text-slate-200 focus:outline-none focus:border-orange-500"/>
                   </div>
                   <button type="submit" disabled={dispatchLoading} className="w-full bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-bold py-2.5 rounded text-xs uppercase tracking-widest shadow-lg transition disabled:opacity-50">
-                    {dispatchLoading ? 'DISPATCHING CARGO BALANCES...' : '🚀 Dispatch Stock'}
+                    {dispatchLoading ? 'DISPATCHING CARGO...' : '🚀 Dispatch Stock'}
                   </button>
                 </form>
               </div>
-
               <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 lg:col-span-2">
                 <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest mb-4">Stock Dispatched Master Balance Log Spreadsheet</h3>
                 <div className="overflow-x-auto">

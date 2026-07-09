@@ -39,7 +39,7 @@ interface SalesLog {
   outlet_id: number
   item_name: string
   quantity_sold: number
-  date_string?: string 
+  date_string: string // Clean localized calendar string used to dodge UTC/timezone stall blocks
   created_at: string
 }
 
@@ -67,11 +67,58 @@ export default function Home() {
   const [notification, setNotification] = useState<string | null>(null)
 
   // NAVIGATION TABS CONTROLLERS
-  const [promoterTab, setPromoterTab] = useState<'overview' | 'branches' | 'revenue_matrix' | 'dispatches' | 'security'>('overview')
+  const [promoterTab, setPromoterTab] = useState<'overview' | 'branches' | 'revenue_audit' | 'dispatches' | 'security'>('overview')
   const [outletTab, setOutletTab] = useState<'counter' | 'ledger' | 'received_stock'>('counter')
   const [promoterActiveTab, setPromoterActiveTab] = useState<'consumption' | 'dispatches'>('consumption')
 
-  // SECURE LOCAL CLOCK STRING PARSER
+  // EXPLICIT SEPARATE CALENDAR DATETIME PICKERS
+  const [overviewStartDate, setOverviewStartDate] = useState<string>(() => {
+    const today = new Date()
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+  })
+  const [overviewEndDate, setOverviewEndDate] = useState<string>(() => {
+    const today = new Date()
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  })
+
+  const [branchCardDateRanges, setBranchCardDateRanges] = useState<{ [key: number]: { start: string; end: string } }>(() => {
+    const today = new Date()
+    const yyyy = today.getFullYear()
+    const mm = String(today.getMonth() + 1).padStart(2, '0')
+    const dd = String(today.getDate()).padStart(2, '0')
+    const initialRange = { start: `${yyyy}-${mm}-01`, end: `${yyyy}-${mm}-${dd}` }
+    return { 1: initialRange, 2: initialRange, 3: initialRange, 4: initialRange, 5: initialRange, 6: initialRange }
+  })
+
+  // NEW DEDICATED DATE RANGE STATE FOR THE REVENUE AUDIT CARDS TAB
+  const [revenueCardDateRanges, setRevenueCardDateRanges] = useState<{ [key: number]: { start: string; end: string } }>(() => {
+    const today = new Date()
+    const yyyy = today.getFullYear()
+    const mm = String(today.getMonth() + 1).padStart(2, '0')
+    const dd = String(today.getDate()).padStart(2, '0')
+    const initialRange = { start: `${yyyy}-${mm}-01`, end: `${yyyy}-${mm}-${dd}` }
+    return { 1: initialRange, 2: initialRange, 3: initialRange, 4: initialRange, 5: initialRange, 6: initialRange }
+  })
+
+  // INDEPENDENT CALENDAR PICKER FOR OUTLET RECEIVED STOCK TAB
+  const [outletReceivedStart, setOutletReceivedStart] = useState<string>(() => {
+    const today = new Date()
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+  })
+  const [outletReceivedEnd, setOutletReceivedEnd] = useState<string>(() => {
+    const today = new Date()
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  })
+
+  // EXPLICIT MANUAL DISTRIBUTION DISPATCH FORM CONTROL FIELDS
+  const [dispatchOutletId, setDispatchOutletId] = useState<number>(1)
+  const [dispatchItemName, setDispatchItemName] = useState<string>('Egg')
+  const [dispatchQty, setDispatchQty] = useState<number>(0)
+  const [dispatchDate, setDispatchDate] = useState<string>(() => {
+    const today = new Date()
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  })
+
   const getTodayDateString = () => {
     const today = new Date()
     const yyyy = today.getFullYear()
@@ -85,34 +132,9 @@ export default function Home() {
   const [outletPeriodStart, setOutletPeriodStart] = useState<string>(getTodayDateString())
   const [outletPeriodEnd, setOutletPeriodEnd] = useState<string>(getTodayDateString())
 
-  const [overviewStartDate, setOverviewStartDate] = useState<string>(() => {
+  const [auditStartDate, setAuditStartDate] = useState<string>(() => {
     const today = new Date()
     return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
-  })
-  const [overviewEndDate, setOverviewEndDate] = useState<string>(getTodayDateString())
-
-  const [branchCardDateRanges, setBranchCardDateRanges] = useState<{ [key: number]: { start: string; end: string } }>(() => {
-    const initialRange = { start: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`, end: getTodayDateString() }
-    return { 1: initialRange, 2: initialRange, 3: initialRange, 4: initialRange, 5: initialRange, 6: initialRange }
-  })
-
-  const [revMatrixDateRanges, setRevMatrixDateRanges] = useState<{ [key: number]: { start: string; end: string } }>(() => {
-    const initialRange = { start: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`, end: getTodayDateString() }
-    return { 1: initialRange, 2: initialRange, 3: initialRange, 4: initialRange, 5: initialRange, 6: initialRange }
-  })
-
-  const [outletReceivedStart, setOutletReceivedStart] = useState<string>(() => {
-    return `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`
-  })
-  const [outletReceivedEnd, setOutletReceivedEnd] = useState<string>(getTodayDateString())
-
-  const [dispatchOutletId, setDispatchOutletId] = useState<number>(1)
-  const [dispatchItemName, setDispatchItemName] = useState<string>('Egg')
-  const [dispatchQty, setDispatchQty] = useState<number>(0)
-  const [dispatchDate, setDispatchDate] = useState<string>(getTodayDateString())
-
-  const [auditStartDate, setAuditStartDate] = useState<string>(() => {
-    return `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`
   })
   const [auditEndDate, setAuditEndDate] = useState<string>(getTodayDateString())
   const [auditIngredient, setAuditIngredient] = useState<string>('ALL')
@@ -145,6 +167,7 @@ export default function Home() {
     return name
   }
 
+  // GENERATE UNIQUE LOCAL BROWSER INSTANCE SIGNATURES TO BLOCK CONCURRENT TERMINAL LOGINS
   const getOrCreateDeviceSignatureToken = () => {
     if (typeof window === 'undefined') return ''
     let token = localStorage.getItem('omk_device_signature_token')
@@ -155,17 +178,7 @@ export default function Home() {
     return token
   }
 
-  // ACCURATE LOCAL TIME EXTRACTOR: Resolves timezone difference correctly
-  const resolveTargetRowDate = (s: SalesLog) => {
-    if (s.date_string && s.date_string.trim().length === 10) {
-      return s.date_string
-    }
-    if (!s.created_at) return liveOperatingDate
-    const d = new Date(s.created_at)
-    const offset = d.getTimezoneOffset() * 60000
-    return new Date(d.getTime() - offset).toISOString().split('T')[0]
-  }
-
+  // PERSIST WORKSPACE SESSION PREFERENCES UPON BROWSER PAGE RELOADS
   useEffect(() => {
     const savedMode = localStorage.getItem('omk_current_mode')
     const savedOutletId = localStorage.getItem('omk_selected_outlet_id')
@@ -178,6 +191,7 @@ export default function Home() {
     }
   }, [])
 
+  // REAL-TIME SECURITY SESSIONS HEARTBEAT INTEGRITY VERIFICATION
   useEffect(() => {
     const fetchSecuritySessions = async () => {
       const { data } = await supabase.from('counter_sessions').select('*')
@@ -191,8 +205,11 @@ export default function Home() {
   useEffect(() => {
     if (currentMode === 'outlet' && selectedOutlet) {
       const currentDeviceToken = getOrCreateDeviceSignatureToken()
+      
       const maintainHeartbeatAndPollAlerts = async () => {
         const { data } = await supabase.from('counter_sessions').select('*').eq('outlet_id', selectedOutlet.id).maybeSingle()
+        
+        // BOOT SCREEN INITIATION: Eject session if device keys mismatch or managed cleared
         if (data && (!data.is_logged_in || (data.device_token && data.device_token !== currentDeviceToken))) {
           alert('Security Alert: This session has been accessed on another physical layout device or force-cleared.')
           exitToGateway()
@@ -240,6 +257,7 @@ export default function Home() {
     setLoading(false)
   }
 
+  // STRICT SINGLE SECURITY DEVICE VERIFICATION ENTRY LOCK GATEWAY ACTION
   const handleSystemGateUnlock = async () => {
     if (!selectedOutlet) {
       if (passwordInput === 'OmkarAdmin#2026') {
@@ -258,12 +276,15 @@ export default function Home() {
 
       const verifiedTargetKey = secureOutletKeys[selectedOutlet.id]
       if (passwordInput === verifiedTargetKey) {
+        
+        // INTERROGATE LIVE STATUS FIRST TO ENFORCE MULTI-DEVICE PROTECTION
         const { data: liveSessionCheck } = await supabase.from('counter_sessions').select('*').eq('outlet_id', selectedOutlet.id).maybeSingle()
         const currentDeviceToken = getOrCreateDeviceSignatureToken()
         
         if (liveSessionCheck && liveSessionCheck.is_logged_in && liveSessionCheck.device_token !== currentDeviceToken) {
           const pastActiveTimestamp = new Date(liveSessionCheck.last_active_at).getTime()
           const exactMinutesDiff = (Date.now() - pastActiveTimestamp) / 1000 / 60
+          
           if (exactMinutesDiff < 5) {
             setErrorMessage(`Access Blocked: This counter terminal is currently open on another physical screen.`);
             return
@@ -302,25 +323,29 @@ export default function Home() {
 
   const getCalculatedItem = (itemName: string, baseStock: number, targetOutletId: number) => {
     const totalReplenished = allReplenishments.filter(r => {
-      return r.outlet_id === targetOutletId && r.item_name === itemName
+      const matchesOutlet = r.outlet_id === targetOutletId
+      const matchesName = r.item_name === itemName
+      return matchesOutlet && matchesName
     }).reduce((a, c) => a + Number(c.quantity_added), 0)
 
     const totalUsedEver = allSalesHistory.filter(s => {
-      if (s.outlet_id !== targetOutletId) return false
+      // Ingredient deduction matching keys
       if (distinctIngredients.includes(s.item_name)) {
-        return s.item_name === itemName
+        return s.item_name === itemName && s.outlet_id === targetOutletId
       }
+      // If menu item match, translate usage via recipes
       const menuRef = menuItems.find(m => m.name === s.item_name)
-      return (menuRef?.recipe.find(r => r.ingredient === itemName)?.qty || 0) > 0
+      const ingUsage = menuRef?.recipe.find(r => r.ingredient === itemName)?.qty || 0
+      return s.outlet_id === targetOutletId && ingUsage > 0
     }).reduce((a, c) => {
-      if (distinctIngredients.includes(c.item_name)) return c.item_name === itemName ? a + Number(c.quantity_sold) : a
+      if (distinctIngredients.includes(c.item_name)) return a + Number(c.quantity_sold)
       const menuRef = menuItems.find(m => m.name === c.item_name)
       const ingUsage = menuRef?.recipe.find(r => r.ingredient === itemName)?.qty || 0
       return a + (Number(c.quantity_sold) * ingUsage)
     }, 0)
     
     const usedToday = allSalesHistory.filter(s => {
-      const matchesDate = resolveTargetRowDate(s) === liveOperatingDate
+      const matchesDate = s.date_string === liveOperatingDate
       if (!matchesDate || s.outlet_id !== targetOutletId) return false
       if (s.item_name === itemName) return true
       const menuRef = menuItems.find(m => m.name === s.item_name)
@@ -336,17 +361,19 @@ export default function Home() {
     return { usedToday, currentStockLeft }
   }
 
+  // UNIFIED DYNAMIC METRIC ENGINE OPERATING OFF UNBIASED SYSTEM OVERRIDES
   const getOutletSalesStatsForDateRange = (targetOutletId: number, startDay: string, endDay: string) => {
     let salesAmountTotal = 0
     let transactionsLoggedCount = 0
     let totalItemsDispatchedCount = 0
 
     allSalesHistory.forEach(s => {
-      const rowDateStr = resolveTargetRowDate(s)
-      if (s.outlet_id === targetOutletId && rowDateStr >= startDay && rowDateStr <= endDay) {
+      if (s.outlet_id === targetOutletId && s.date_string >= startDay && s.date_string <= endDay) {
+        // EXACT ATOMIC COUNT ANCHOR: Tracks individual 'Boxes' row submissions to increase order count cleanly by +1
         if (s.item_name === 'Boxes') {
           transactionsLoggedCount += s.quantity_sold
         } else if (!distinctIngredients.includes(s.item_name)) {
+          // If it's a direct menu variant, calculate financial revenue additions
           totalItemsDispatchedCount += s.quantity_sold
           salesAmountTotal += (s.quantity_sold * (menuItems.find(m => m.name === s.item_name)?.price || 0))
         }
@@ -356,11 +383,12 @@ export default function Home() {
     return { salesAmountTotal, transactionsLoggedCount, totalItemsDispatchedCount }
   }
 
+  // DYNAMIC MENU SALES LOG BREAKDOWN: Pulls directly from stored actual menu titles
   const getProductSalesPerformanceBreakdown = (targetOutletId: number | 'ALL', startDay: string, endDay: string) => {
     return menuItems.map(menuItem => {
       const unitsSold = allSalesHistory.filter(s => {
         const matchesOutlet = targetOutletId === 'ALL' || s.outlet_id === targetOutletId
-        const matchesRange = resolveTargetRowDate(s) >= startDay && resolveTargetRowDate(s) <= endDay
+        const matchesRange = s.date_string >= startDay && s.date_string <= endDay
         return s.item_name === menuItem.name && matchesOutlet && matchesRange
       }).reduce((a, c) => a + Number(c.quantity_sold), 0)
 
@@ -368,14 +396,17 @@ export default function Home() {
     })
   }
 
+  // COMPUTE HIGH VELOCITY HERO PRODUCT IDENTIFIERS FOR HIGHLIGHT PILLS
   const getTopPerformerLabel = (targetOutletId: number | 'ALL', startDay: string, endDay: string) => {
     const list = getProductSalesPerformanceBreakdown(targetOutletId, startDay, endDay)
     const sorted = [...list].sort((a, b) => b.unitsSold - a.unitsSold)
     return sorted[0] && sorted[0].unitsSold > 0 ? sorted[0].name : 'None'
   }
 
+  // CENTRAL MATERIAL DISPATCH EXECUTION CONTROLLER
   const handleExecuteStockDispatch = async () => {
     if (dispatchQty <= 0) return alert('Please enter a valid stock volume amount')
+    
     const dayIndexInteger = new Date(dispatchDate).getDate()
 
     await supabase.from('inventory_replenishments').insert({
@@ -412,6 +443,7 @@ export default function Home() {
 
     const activeLocalStamp = getTodayDateString()
 
+    // Write real structural menu selection line records directly into database logs
     for (const item of menuItems) {
       const selectedVolumeCount = quantities[item.id] || 0
       if (selectedVolumeCount > 0) {
@@ -425,7 +457,7 @@ export default function Home() {
       }
     }
 
-    // TRUE ATOMIC COUNTER: Inserts exactly one unique 'Boxes' logging instance to compute +1 order shifts accurately
+    // UNIQUE ATOMIC ORDER TRACKER ROW: Anchor token mapping explicitly to 'Boxes' to secure perfect unskewed transaction metrics
     await supabase.from('sales_history').insert({
       outlet_id: selectedOutlet.id,
       item_name: 'Boxes',
@@ -434,10 +466,15 @@ export default function Home() {
       created_at: new Date().toISOString()
     })
 
-    alert('Bill Successfully Punched Check!')
+    alert('Bill Successfully Punched!')
     setQuantities({})
     syncGlobalDatabaseData(selectedOutlet.id)
   }
+
+  const adjustQuantity = (id: string, amount: number) => {
+    setQuantities(prev => ({ ...prev, [id]: Math.max((prev[id] || 0) + amount, 0) }))
+  }
+  const orderTotal = menuItems.reduce((acc, item) => acc + (quantities[item.id] || 0) * item.price, 0)
 
   const exitToGateway = async () => {
     if (currentMode === 'outlet' && selectedOutlet) {
@@ -456,11 +493,6 @@ export default function Home() {
     setErrorMessage('')
     setQuantities({})
   }
-
-  const adjustQuantity = (id: string, amount: number) => {
-    setQuantities(prev => ({ ...prev, [id]: Math.max((prev[id] || 0) + amount, 0) }))
-  }
-  const orderTotal = menuItems.reduce((acc, item) => acc + (quantities[item.id] || 0) * item.price, 0)
 
   const generateAuditDateRangeList = (start: string, end: string) => {
     const list: string[] = []
@@ -481,6 +513,7 @@ export default function Home() {
   currentRenderHeaders.forEach(headerKey => { dynamicBottomTotals[headerKey] = 0 })
   let spreadsheetGrandTotal = 0
 
+  // CALCULATION MATRIX: Central aggregate tracker
   let globalPromoterTodaySalesRevenue = 0
   let globalPromoterTodayOrderCount = 0
   let globalPromoterTodayItemCount = 0
@@ -548,6 +581,7 @@ export default function Home() {
           </div>
         )}
 
+        {/* OUTLET CORE METRICS SUMMARY DISPLAY PANEL */}
         <header className="mb-4 sticky top-0 bg-slate-950/95 backdrop-blur border-b border-slate-800 pb-4 z-40 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
           <div className="flex items-center gap-4">
             <div>
@@ -558,7 +592,8 @@ export default function Home() {
               </div>
             </div>
             
-            <div className="bg-gradient-to-r from-purple-950/40 to-blue-950/30 border border-purple-900/60 px-4 py-2 rounded-xl block">
+            {/* RESTORED OUTLET WORKSPACE TOP PERFORMER DISPLAY COMPONENT */}
+            <div className="bg-gradient-to-r from-purple-950/40 to-blue-950/30 border border-purple-900/60 px-4 py-2 rounded-xl hidden sm:block">
               <span className="text-[9px] uppercase font-black text-purple-400 block tracking-widest">Outlet Top Performer</span>
               <span className="text-xs font-extrabold text-white font-sans">{getTopPerformerLabel(selectedOutlet.id, liveOperatingDate, liveOperatingDate)}</span>
             </div>
@@ -581,6 +616,7 @@ export default function Home() {
           </div>
         </header>
 
+        {/* OUTLET SWITCHER SELECTION TABS BAR */}
         <div className="flex gap-2 border-b border-slate-800 mb-6">
           <button onClick={() => setOutletTab('counter')} className={`px-5 py-2.5 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${outletTab === 'counter' ? 'bg-slate-900 text-blue-400 border-b-2 border-blue-500' : 'text-slate-500 hover:text-slate-300'}`}>🛒 Counter Desk Terminal</button>
           <button onClick={() => setOutletTab('ledger')} className={`px-5 py-2.5 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${outletTab === 'ledger' ? 'bg-slate-900 text-amber-400 border-b-2 border-amber-500' : 'text-slate-500 hover:text-slate-300'}`}>📜 Sales Ledger Audit</button>
@@ -647,7 +683,7 @@ export default function Home() {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-4 gap-4">
               <div>
                 <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200">Outlet Sales History lookup</h3>
-                <p className="text-[10px] text-slate-500">Filter and review past performance summaries</p>
+                <p className="text-[10px] text-slate-500">Filter and review past performance summaries directly on the counter</p>
               </div>
               
               <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 p-2 rounded-xl font-mono text-xs">
@@ -767,6 +803,7 @@ export default function Home() {
         </div>
       )}
 
+      {/* CENTRALIZED PROMOTER DASHBOARD CONTROL HEAD PANEL */}
       <header className="sticky top-0 bg-slate-950/95 backdrop-blur z-40 border-b border-slate-800 pb-4 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
         <div className="flex items-center gap-4">
           <div>
@@ -774,6 +811,7 @@ export default function Home() {
             <p className="text-[10px] text-slate-500 font-mono mt-0.5 uppercase tracking-widest">Global Master Operations, Logistics & Security Panel</p>
           </div>
 
+          {/* RESTORED GLOBAL DASHBOARD NETWORK WIDE TOP PERFORMER WIDGET */}
           <div className="bg-gradient-to-r from-amber-500/10 to-blue-500/5 border border-amber-500/20 px-4 py-2 rounded-xl hidden md:block">
             <span className="text-[9px] uppercase font-black text-amber-400 block tracking-widest">Network Top Performer</span>
             <span className="text-xs font-black text-white font-sans">{getTopPerformerLabel('ALL', liveOperatingDate, liveOperatingDate)}</span>
@@ -797,11 +835,12 @@ export default function Home() {
         </div>
       </header>
 
+      {/* NAVIGATION TABS SELECTOR ROW */}
       <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-0.5">
         <button onClick={() => setPromoterTab('overview')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${promoterTab === 'overview' ? 'bg-slate-900 text-blue-400 border-b-2 border-blue-500' : 'text-slate-500 hover:text-slate-300'}`}>📊 Network Overview</button>
         <button onClick={() => setPromoterTab('branches')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${promoterTab === 'branches' ? 'bg-slate-900 text-purple-400 border-b-2 border-purple-500' : 'text-slate-500 hover:text-slate-300'}`}>🏪 Branch-by-Branch Matrix</button>
-        <button onClick={() => setPromoterTab('revenue_matrix')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${promoterTab === 'revenue_matrix' ? 'bg-slate-900 text-emerald-400 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-300'}`}>💰 Revenue Matrix</button>
-        <button onClick={() => setPromoterTab('dispatches')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${promoterTab === 'dispatches' ? 'bg-slate-900 text-amber-500 border-b-2 border-amber-500' : 'text-slate-500 hover:text-slate-300'}`}>📦 Stock Dispatch Desk</button>
+        <button onClick={() => setPromoterTab('revenue_audit')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${promoterTab === 'revenue_audit' ? 'bg-slate-900 text-emerald-400 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-300'}`}>💵 Revenue Cards</button>
+        <button onClick={() => setPromoterTab('dispatches')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${promoterTab === 'dispatches' ? 'bg-slate-900 text-emerald-400 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-300'}`}>📦 Stock Dispatch Desk</button>
         <button onClick={() => setPromoterTab('security')} className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-xl transition ${promoterTab === 'security' ? 'bg-slate-900 text-red-400 border-b-2 border-red-500' : 'text-slate-500 hover:text-slate-300'}`}>🔐 Terminal Security Locks</button>
       </div>
 
@@ -832,15 +871,15 @@ export default function Home() {
               return (
                 <>
                   <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl text-center shadow">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Combined Period Period Revenue</span>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Combined Period Revenue</span>
                     <span className="text-2xl font-black text-emerald-400 font-mono block mt-1">${rev.toLocaleString()}</span>
                   </div>
                   <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl text-center shadow">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Combined Period Period Orders</span>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Combined Period Orders</span>
                     <span className="text-2xl font-black text-blue-400 font-mono block mt-1">{ord.toLocaleString()} orders</span>
                   </div>
                   <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl text-center shadow">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Combined Period Period Items Sold</span>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Combined Period Items Sold</span>
                     <span className="text-2xl font-black text-amber-500 font-mono block mt-1">{itm.toLocaleString()} units</span>
                   </div>
                 </>
@@ -926,20 +965,21 @@ export default function Home() {
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 text-center font-mono text-xs pt-1">
-                    <div className="bg-slate-900/40 p-2 rounded border border-slate-800/60">
+                    <div className="bg-slate-950/40 p-2 rounded border border-slate-800/60">
                       <span className="text-[9px] font-sans text-slate-500 block">Revenue</span>
                       <span className="font-bold text-emerald-400">${localStats.salesAmountTotal}</span>
                     </div>
-                    <div className="bg-slate-900/40 p-2 rounded border border-slate-800/60">
+                    <div className="bg-slate-950/40 p-2 rounded border border-slate-800/60">
                       <span className="text-[9px] font-sans text-slate-500 block">Orders</span>
                       <span className="font-bold text-blue-400">{localStats.transactionsLoggedCount}</span>
                     </div>
-                    <div className="bg-slate-900/40 p-2 rounded border border-slate-800/60">
+                    <div className="bg-slate-950/40 p-2 rounded border border-slate-800/60">
                       <span className="text-[9px] font-sans text-slate-500 block">Items</span>
                       <span className="font-bold text-amber-500">{localStats.totalItemsDispatchedCount}</span>
                     </div>
                   </div>
 
+                  {/* HIGH CONTRAST DYNAMIC TOP PERFORMER COMPONENT INSIDE MATRIX CARDS */}
                   <div className="bg-slate-950/80 rounded-xl px-3 py-1.5 border border-purple-900/30 text-center">
                     <span className="text-[10px] font-sans text-purple-400 font-bold block">
                       ⭐ Window Best Seller: <span className="text-white font-mono font-black">{getTopPerformerLabel(o.id, localRange.start, localRange.end)}</span>
@@ -962,80 +1002,88 @@ export default function Home() {
         </div>
       )}
 
-      {promoterTab === 'revenue_matrix' && (
+      {/* NEWLY ADDED DEDICATED REVENUE AUDIT CARDS SUITE TAB */}
+      {promoterTab === 'revenue_audit' && (
         <div className="space-y-6">
-          <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
-            <div>
-              <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">💰 Network Revenue Matrix Monitor</h3>
-              <p className="text-[10px] text-slate-500 mt-0.5">Reviews absolute monetary sales metrics layered with deep item quantity log arrays.</p>
-            </div>
-            <span className="text-[11px] font-mono text-slate-400 bg-slate-950 border border-slate-800 px-3 py-1 rounded-lg">Target: Multi-Branch Overview</span>
+          <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
+            <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Financial Auditor Suite</h3>
+            <p className="text-[10px] text-slate-500 mt-0.5">Isolated performance revenue matrices logging unit counts and dollar conversions across historical date nodes.</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {outlets.map(o => {
-              const localRange = revMatrixDateRanges[o.id] || { start: liveOperatingDate, end: liveOperatingDate }
-              const localStats = getOutletSalesStatsForDateRange(o.id, localRange.start, localRange.end)
+              const auditRange = revenueCardDateRanges[o.id] || { start: liveOperatingDate, end: liveOperatingDate }
+              const auditStats = getOutletSalesStatsForDateRange(o.id, auditRange.start, auditRange.end)
 
               return (
-                <div key={o.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col justify-between space-y-4">
-                  <div className="flex justify-between items-start border-b border-slate-800 pb-3">
+                <div key={o.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-md flex flex-col justify-between space-y-4">
+                  
+                  {/* CARD TITLE LAYOUT HEADER */}
+                  <div className="flex justify-between items-start border-b border-slate-800 pb-2">
                     <div>
                       <h4 className="text-base font-black text-emerald-400">{o.name} Revenue Card</h4>
-                      <span className="text-[9px] text-slate-500 uppercase tracking-widest">Financial Auditor Suite</span>
+                      <span className="text-[9px] text-slate-500 uppercase font-bold tracking-wider">Financial Auditor Suite</span>
                     </div>
-                    <span className="bg-emerald-950 text-emerald-400 border border-emerald-900 text-[10px] px-2 py-0.5 rounded font-black tracking-tight font-mono">${localStats.salesAmountTotal.toLocaleString()}</span>
+                    <span className="text-xs font-mono font-black text-emerald-400 bg-slate-950 px-2 py-0.5 border border-slate-800 rounded">${auditStats.salesAmountTotal.toLocaleString()}</span>
                   </div>
 
+                  {/* DATE SELECTION SEGMENT */}
                   <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 space-y-2">
                     <span className="text-[9px] uppercase font-bold text-slate-500 block">Card Audit Date Window</span>
                     <div className="flex items-center justify-between gap-1 font-mono text-[11px]">
                       <input 
                         type="date" 
-                        value={localRange.start} 
-                        onChange={(e) => setRevMatrixDateRanges(prev => ({ ...prev, [o.id]: { ...prev[o.id], start: e.target.value } }))} 
+                        value={auditRange.start} 
+                        onChange={(e) => setRevenueCardDateRanges(prev => ({ ...prev, [o.id]: { ...prev[o.id], start: e.target.value } }))} 
                         className="bg-slate-900 border border-slate-700 text-white rounded px-1.5 py-0.5 focus:outline-none w-[105px]" 
                       />
                       <span className="text-slate-600 font-sans text-xs">to</span>
                       <input 
                         type="date" 
-                        value={localRange.end} 
-                        onChange={(e) => setRevMatrixDateRanges(prev => ({ ...prev, [o.id]: { ...prev[o.id], end: e.target.value } }))} 
+                        value={auditRange.end} 
+                        onChange={(e) => setRevenueCardDateRanges(prev => ({ ...prev, [o.id]: { ...prev[o.id], end: e.target.value } }))} 
                         className="bg-slate-900 border border-slate-700 text-white rounded px-1.5 py-0.5 focus:outline-none w-[105px]" 
                       />
                     </div>
                   </div>
 
+                  {/* STATS MATRIX GRID */}
                   <div className="grid grid-cols-3 gap-2 text-center font-mono text-xs pt-1">
-                    <div className="bg-slate-950/50 p-2 rounded border border-emerald-900/20">
+                    <div className="bg-slate-950/40 p-2 rounded border border-slate-800/60">
                       <span className="text-[9px] font-sans text-slate-500 block">Total Revenue</span>
-                      <span className="font-extrabold text-emerald-400">${localStats.salesAmountTotal.toLocaleString()}</span>
+                      <span className="font-bold text-emerald-400">${auditStats.salesAmountTotal.toLocaleString()}</span>
                     </div>
                     <div className="bg-slate-950/40 p-2 rounded border border-slate-800/60">
                       <span className="text-[9px] font-sans text-slate-500 block">Orders Done</span>
-                      <span className="font-bold text-blue-400">{localStats.transactionsLoggedCount}</span>
+                      <span className="font-bold text-blue-400">{auditStats.transactionsLoggedCount}</span>
                     </div>
                     <div className="bg-slate-950/40 p-2 rounded border border-slate-800/60">
                       <span className="text-[9px] font-sans text-slate-500 block">Menu Items</span>
-                      <span className="font-bold text-amber-500">{localStats.totalItemsDispatchedCount}</span>
+                      <span className="font-bold text-amber-500">{auditStats.totalItemsDispatchedCount}</span>
                     </div>
                   </div>
 
-                  <div className="bg-slate-950/80 rounded-xl px-3 py-1.5 border border-amber-900/30 text-center">
+                  {/* HIGHEST VELOCITY SELLER PILL */}
+                  <div className="bg-amber-500/10 rounded-xl px-3 py-1.5 border border-amber-500/20 text-center">
                     <span className="text-[10px] font-sans text-amber-400 font-bold block">
-                      🏆 Highest Velocity Seller: <span className="text-white font-mono font-black">{getTopPerformerLabel(o.id, localRange.start, localRange.end)}</span>
+                      🏆 Highest Velocity Seller: <span className="text-white font-mono font-black">{getTopPerformerLabel(o.id, auditRange.start, auditRange.end)}</span>
                     </span>
                   </div>
 
+                  {/* ITEMIZED SALES BREAKDOWN SHEET WITH EXPLICIT VALUES */}
                   <div className="bg-slate-950 rounded-xl p-3 border border-slate-800 space-y-1 text-[11px] max-h-36 overflow-y-auto">
                     <span className="text-[9px] text-emerald-400 uppercase font-bold tracking-wider block mb-1">Itemized Sales Dissection:</span>
-                    {getProductSalesPerformanceBreakdown(o.id, localRange.start, localRange.end).map(prod => (
-                      <div key={prod.id} className="flex justify-between items-center font-mono border-b border-slate-900 pb-0.5 last:border-0 text-slate-400">
+                    {getProductSalesPerformanceBreakdown(o.id, auditRange.start, auditRange.end).map(prod => (
+                      <div key={prod.id} className="flex justify-between items-center font-mono text-slate-400 border-b border-slate-900 pb-1 pt-0.5 last:border-0">
                         <span className="font-sans text-white truncate max-w-[130px]">{prod.name}</span>
-                        <span className="text-emerald-500 font-bold">${prod.itemRevenue.toLocaleString()} <span className="text-slate-600 font-normal text-[10px]">({prod.unitsSold} qty)</span></span>
+                        <div className="text-right space-x-2">
+                          <span className="text-emerald-400 font-bold">${prod.itemRevenue.toLocaleString()}</span>
+                          <span className="text-slate-600 text-[10px]">({prod.unitsSold} qty)</span>
+                        </div>
                       </div>
                     ))}
                   </div>
+
                 </div>
               )
             })}
@@ -1135,12 +1183,12 @@ export default function Home() {
                             if (shouldRenderIngredientColumns) {
                               const targetIngName = colHeader
                               computedValue = allSalesHistory.filter(s => {
-                                return s.item_name === targetIngName && (auditOutletFilter === 'ALL' || s.outlet_id === Number(auditOutletFilter)) && resolveTargetRowDate(s) === dateString
+                                return s.item_name === targetIngName && (auditOutletFilter === 'ALL' || s.outlet_id === Number(auditOutletFilter)) && s.date_string === dateString
                               }).reduce((a, c) => a + Number(c.quantity_sold), 0)
                             } else {
                               const targetOutletId = outlets.find(o => o.name === colHeader)?.id || 0
                               computedValue = allSalesHistory.filter(s => {
-                                return s.item_name === auditIngredient && s.outlet_id === targetOutletId && resolveTargetRowDate(s) === dateString
+                                return s.item_name === auditIngredient && s.outlet_id === targetOutletId && s.date_string === dateString
                               }).reduce((a, c) => a + Number(c.quantity_sold), 0)
                             }
                           } else {
@@ -1192,7 +1240,7 @@ export default function Home() {
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
           <div>
             <h3 className="text-sm font-bold text-red-400 uppercase tracking-wider">Multi-Device Anti-Fraud Session Controller</h3>
-            <p className="text-[10px] text-slate-500 Dino">Enforces an absolute single-screen policy per outlet terminal. Clear stuck or zombie devices instantly down below.</p>
+            <p className="text-[10px] text-slate-500">Enforces an absolute single-screen policy per outlet terminal. Clear stuck or zombie devices instantly down below.</p>
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950">
